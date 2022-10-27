@@ -18,7 +18,9 @@ import (
 	"sort"
 
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	v31 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
+	hcm "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	tcp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/tcp_proxy/v3"
 	envoytype "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/wellknown"
@@ -26,6 +28,8 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	wrappers "google.golang.org/protobuf/types/known/wrapperspb"
 
+	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
+	router "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/router/v3"
 	networking "istio.io/api/networking/v1alpha3"
 	"istio.io/istio/pilot/pkg/features"
 	"istio.io/istio/pilot/pkg/model"
@@ -349,7 +353,76 @@ func (lb *ListenerBuilder) buildHTTPProxyListener(configgen *ConfigGeneratorImpl
 	return lb
 }
 
-func (lb *ListenerBuilder) buildVirtualOutboundListener(configgen *ConfigGeneratorImpl) *ListenerBuilder {
+func (lb *ListenerBuilder) buildPongInboundListener() *ListenerBuilder {
+	httpConnection := &hcm.HttpConnectionManager{
+		StatPrefix: "hello",
+		RouteSpecifier: &hcm.HttpConnectionManager_RouteConfig{
+			RouteConfig: &routev3.RouteConfiguration{
+				Name: "helloRouter",
+				VirtualHosts: []*routev3.VirtualHost{
+					{
+						Name:    "hello",
+						Domains: []string{"*"},
+						Routes: []*routev3.Route{
+							{
+								Name: "hello",
+								Match: &routev3.RouteMatch{
+									PathSpecifier: &routev3.RouteMatch_Prefix{
+										Prefix: "/",
+									},
+								},
+								Action: &routev3.Route_DirectResponse{
+									DirectResponse: &routev3.DirectResponseAction{
+										Status: 200,
+										Body: &v31.DataSource{
+											Specifier: &v31.DataSource_InlineString{
+												InlineString: "world",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		HttpFilters: []*hcm.HttpFilter{
+			{
+				Name: wellknown.Router,
+				ConfigType: &hcm.HttpFilter_TypedConfig{
+					TypedConfig: util.MessageToAny(&router.Router{}),
+				},
+			},
+		},
+	}
+	filter := &listener.Filter{
+		Name: wellknown.HTTPConnectionManager,
+		ConfigType: &listener.Filter_TypedConfig{
+			TypedConfig: util.MessageToAny(httpConnection),
+		},
+	}
+	lb.inboundListeners = append(lb.inboundListeners, &listener.Listener{
+		Name:    "helloListener",
+		Address: util.BuildAddress("0.0.0.0", 18000),
+		FilterChains: []*listener.FilterChain{
+			{
+				Filters: []*listener.Filter{
+					filter,
+				},
+				Name: "pongFilter",
+			},
+		},
+	})
+	return lb
+}
+
+func (lb *ListenerBuilder) buildVirtualOutboundListener() *ListenerBuilder {
+	if lb.node.GetInterceptionMode() == model.InterceptionNone {
+		// virtual listener is not necessary since workload is not using IPtables for traffic interception
+		return lb
+	}
+
 	var isTransparentProxy *wrappers.BoolValue
 	if lb.node.GetInterceptionMode() == model.InterceptionTproxy {
 		isTransparentProxy = proto.BoolTrue
