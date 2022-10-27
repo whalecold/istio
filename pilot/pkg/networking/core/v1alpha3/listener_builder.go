@@ -353,7 +353,7 @@ func (lb *ListenerBuilder) buildHTTPProxyListener(configgen *ConfigGeneratorImpl
 	return lb
 }
 
-func (lb *ListenerBuilder) buildPongInboundListener() *ListenerBuilder {
+func (lb *ListenerBuilder) buildPongInboundListener(configgen *ConfigGeneratorImpl) *ListenerBuilder {
 	httpConnection := &hcm.HttpConnectionManager{
 		StatPrefix: "hello",
 		RouteSpecifier: &hcm.HttpConnectionManager_RouteConfig{
@@ -417,7 +417,7 @@ func (lb *ListenerBuilder) buildPongInboundListener() *ListenerBuilder {
 	return lb
 }
 
-func (lb *ListenerBuilder) buildVirtualOutboundListener() *ListenerBuilder {
+func (lb *ListenerBuilder) buildVirtualOutboundListener(configgen *ConfigGeneratorImpl) *ListenerBuilder {
 	if lb.node.GetInterceptionMode() == model.InterceptionNone {
 		// virtual listener is not necessary since workload is not using IPtables for traffic interception
 		return lb
