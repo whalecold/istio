@@ -198,7 +198,6 @@ func convertServices(cfg config.Config) []*model.Service {
 			hostAddresses = append(hostAddresses, &HostAddress{hostname, constants.UnspecifiedIP})
 		}
 	}
-
 	return buildServices(hostAddresses, cfg.Namespace, svcPorts, serviceEntry.Location, resolution,
 		exportTo, labelSelectors, serviceEntry.SubjectAltNames, creationTime, cfg.Labels)
 }

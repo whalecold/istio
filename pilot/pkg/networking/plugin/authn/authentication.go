@@ -92,6 +92,14 @@ func (p Plugin) InboundMTLSConfiguration(in *plugin.InputParams, passthrough boo
 
 	port := in.ServiceInstance.Endpoint.EndpointPort
 
+	// FIXME
+	//if portString, ok := in.ServiceInstance.Service.Attributes.Labels["sidecar.mesh.io/overwrite-inbound-port"]; ok {
+	//	portInt, err := strconv.Atoi(portString)
+	//	if err == nil {
+	//		port = uint32(portInt)
+	//	}
+	//}
+
 	// For non passthrough, set up the specific port
 	if !passthrough {
 		return []plugin.MTLSSettings{

@@ -290,6 +290,9 @@ func (configgen *ConfigGeneratorImpl) buildSidecarInboundListeners(
 			// redirected by remote services' kubeproxy to our specific endpoint IP.
 			port := *instance.ServicePort
 			port.Port = int(endpoint.EndpointPort)
+			if val, ok := instance.Service.Attributes.Labels["sidecar.mesh.io/overwrite-workload-port"]; ok && val == "true" {
+				port.Port = instance.ServicePort.Port
+			}
 			listenerOpts := buildListenerOpts{
 				push:       push,
 				proxy:      node,

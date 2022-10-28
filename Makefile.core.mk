@@ -273,7 +273,8 @@ STANDARD_BINARIES:=./istioctl/cmd/istioctl \
   ./cni/cmd/install-cni \
   ./tools/istio-iptables \
   ./tools/bug-report
-BINARIES:=$(STANDARD_BINARIES) $(AGENT_BINARIES)
+#BINARIES:=$(STANDARD_BINARIES) $(AGENT_BINARIES)
+BINARIES:=./pilot/cmd/pilot-discovery
 
 # List of binaries included in releases
 RELEASE_BINARIES:=pilot-discovery pilot-agent istioctl bug-report
