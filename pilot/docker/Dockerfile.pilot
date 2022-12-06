@@ -7,6 +7,10 @@ ARG BASE_VERSION=latest
 # The following section is used as base image if BASE_DISTRIBUTION=debug
 FROM gcr.io/istio-release/base:${BASE_VERSION} as debug
 
+FROM dlv:v2 as build-env
+#RUN go get github.com/go-delve/delve/cmd/dlv
+
+
 # The following section is used as base image if BASE_DISTRIBUTION=distroless
 FROM gcr.io/istio-release/distroless:${BASE_VERSION} as distroless
 
@@ -17,10 +21,15 @@ FROM ${BASE_DISTRIBUTION:-debug}
 ARG TARGETARCH
 COPY ${TARGETARCH:-amd64}/pilot-discovery /usr/local/bin/pilot-discovery
 
+COPY --from=build-env /gobin/dlv /usr/local/bin/dlv
+
 # Copy templates for bootstrap generation.
 COPY envoy_bootstrap.json /var/lib/istio/envoy/envoy_bootstrap_tmpl.json
 COPY gcp_envoy_bootstrap.json /var/lib/istio/envoy/gcp_envoy_bootstrap_tmpl.json
 
 USER 1337:1337
 
-ENTRYPOINT ["/usr/local/bin/pilot-discovery"]
+EXPOSE 40000
+
+#ENTRYPOINT ["/usr/local/bin/pilot-discovery"]
+ENTRYPOINT ["/usr/local/bin/dlv", "--continue", "--accept-multiclient", "--listen=:40000", "--check-go-version=false", "--headless=true", "--api-version=2", "--log=true", "--log-output=debugger,debuglineerr,gdbwire,lldbout,rpc", "exec", "/usr/local/bin/pilot-discovery", "--"]

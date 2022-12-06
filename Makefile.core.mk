@@ -263,17 +263,18 @@ endif
 # We split the binaries into "agent" binaries and standard ones. This corresponds to build "agent".
 # This allows conditional compilation to avoid pulling in costly dependencies to the agent, such as XDS and k8s.
 AGENT_BINARIES:=./pilot/cmd/pilot-agent
-STANDARD_BINARIES:=./istioctl/cmd/istioctl \
-  ./pilot/cmd/pilot-discovery \
-  ./pkg/test/echo/cmd/client \
-  ./pkg/test/echo/cmd/server \
-  ./operator/cmd/operator \
-  ./cni/cmd/istio-cni \
-  ./cni/cmd/istio-cni-taint \
-  ./cni/cmd/install-cni \
-  ./tools/istio-iptables \
-  ./tools/bug-report
-#BINARIES:=$(STANDARD_BINARIES) $(AGENT_BINARIES)
+STANDARD_BINARIES:=./pilot/cmd/pilot-discovery
+#STANDARD_BINARIES:=./istioctl/cmd/istioctl \
+#  ./pilot/cmd/pilot-discovery \
+#  ./pkg/test/echo/cmd/client \
+#  ./pkg/test/echo/cmd/server \
+#  ./operator/cmd/operator \
+#  ./cni/cmd/istio-cni \
+#  ./cni/cmd/istio-cni-taint \
+#  ./cni/cmd/install-cni \
+#  ./tools/istio-iptables \
+#  ./tools/bug-report
+##BINARIES:=$(STANDARD_BINARIES) $(AGENT_BINARIES)
 BINARIES:=./pilot/cmd/pilot-discovery
 
 # List of binaries included in releases
@@ -281,8 +282,8 @@ RELEASE_BINARIES:=pilot-discovery pilot-agent istioctl bug-report
 
 .PHONY: build
 build: depend ## Builds all go binaries.
-	GOOS=$(GOOS_LOCAL) GOARCH=$(GOARCH_LOCAL) LDFLAGS=$(RELEASE_LDFLAGS) common/scripts/gobuild.sh $(ISTIO_OUT)/ $(STANDARD_BINARIES)
-	GOOS=$(GOOS_LOCAL) GOARCH=$(GOARCH_LOCAL) LDFLAGS=$(RELEASE_LDFLAGS) common/scripts/gobuild.sh $(ISTIO_OUT)/ -tags=agent $(AGENT_BINARIES)
+	#GOOS=$(GOOS_LOCAL) GOARCH=$(GOARCH_LOCAL) LDFLAGS=$(RELEASE_LDFLAGS) common/scripts/gobuild.sh $(ISTIO_OUT)/ $(STANDARD_BINARIES)
+	#GOOS=$(GOOS_LOCAL) GOARCH=$(GOARCH_LOCAL) LDFLAGS=$(RELEASE_LDFLAGS) common/scripts/gobuild.sh $(ISTIO_OUT)/ -tags=agent $(AGENT_BINARIES)
 
 # The build-linux target is responsible for building binaries used within containers.
 # This target should be expanded upon as we add more Linux architectures: i.e. build-arm64.

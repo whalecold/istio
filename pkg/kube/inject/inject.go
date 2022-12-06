@@ -46,6 +46,7 @@ import (
 	meshconfig "istio.io/api/mesh/v1alpha1"
 	proxyConfig "istio.io/api/networking/v1beta1"
 	opconfig "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
+	"istio.io/istio/pilot/pkg/features"
 	"istio.io/istio/pkg/config/mesh"
 	"istio.io/istio/pkg/util/gogoprotomarshal"
 	"istio.io/pkg/log"
@@ -388,10 +389,8 @@ func RunTemplate(params InjectionParameters) (mergedPod *corev1.Pod, templatePod
 		params.proxyEnvs["ISTIO_META_NETWORK"] = network
 	}
 
-	values := map[string]interface{}{}
-	if err := yaml.Unmarshal([]byte(params.valuesConfig), &values); err != nil {
-		log.Infof("Failed to parse values config: %v [%v]\n", err, params.valuesConfig)
-		return nil, nil, multierror.Prefix(err, "could not parse configuration values:")
+	if features.DeltaXds {
+		params.proxyEnvs["ISTIO_DELTA_XDS"] = "true"
 	}
 
 	strippedPod, err := reinsertOverrides(stripPod(params))
