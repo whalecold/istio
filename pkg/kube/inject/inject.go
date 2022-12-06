@@ -393,6 +393,12 @@ func RunTemplate(params InjectionParameters) (mergedPod *corev1.Pod, templatePod
 		params.proxyEnvs["ISTIO_DELTA_XDS"] = "true"
 	}
 
+	values := map[string]interface{}{}
+	if err := yaml.Unmarshal([]byte(params.valuesConfig), &values); err != nil {
+		log.Infof("Failed to parse values config: %v [%v]\n", err, params.valuesConfig)
+		return nil, nil, multierror.Prefix(err, "could not parse configuration values:")
+	}
+
 	strippedPod, err := reinsertOverrides(stripPod(params))
 	if err != nil {
 		return nil, nil, err
