@@ -32,6 +32,7 @@ import (
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pilot/pkg/status/distribution"
 	"istio.io/istio/pkg/adsc"
+	"istio.io/istio/pkg/adsc/mcpdiscovery"
 	"istio.io/istio/pkg/config/analysis/incluster"
 	"istio.io/istio/pkg/config/schema/collections"
 	"istio.io/istio/pkg/config/schema/gvk"
@@ -52,6 +53,9 @@ const (
 	// k8s:// - load in-cluster k8s controller
 	// example k8s://
 	Kubernetes ConfigSourceAddressScheme = "k8s"
+	// multixds:// - load multi-XDS-over-MCP sources
+	// example multixds://ns/configmap-name
+	MultiXDS ConfigSourceAddressScheme = "multixds"
 )
 
 // initConfigController creates the config controller in the pilotConfig.
@@ -239,6 +243,39 @@ func (s *Server) initConfigSources(args *PilotArgs) (err error) {
 				return err
 			}
 			s.ConfigStores = append(s.ConfigStores, configController)
+		case MultiXDS:
+			if s.kubeClient == nil {
+				log.Warn("Empty K8S client")
+				continue
+			}
+
+			// the configmap will not change frequently, one goroutine is enough.
+			discovery := mcpdiscovery.New(s.kubeClient.Kube(), &mcpdiscovery.Options{
+				EnableDiscovery: true,
+			})
+
+			multiMCP, err := adsc.NewMultiADSC(&adsc.Config{
+				Namespace: args.Namespace,
+				Workload:  args.PodName,
+				Revision:  args.Revision,
+				Meta: model.NodeMetadata{
+					Generator: "api",
+					// To reduce transported data if upstream server supports. Especially for custom servers.
+					IstioRevision: args.Revision,
+				}.ToStruct(),
+				InitialDeltaDiscoveryRequests: adsc.ConfigMultiADSCInitialRequests(),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to dial init multi adsc client %s %v", configSource.Address, err)
+			}
+			discovery.RegisterHandler(multiMCP)
+
+			s.multiMcpService = multiMCP
+			//s.multiDiscoveryService = discovery
+			go discovery.Run(make(chan struct{}))
+
+			s.ConfigStores = append(s.ConfigStores, multiMCP.GetStore())
+			log.Info("Started Multi XDS config ", s.ConfigStores)
 		case XDS:
 			xdsMCP, err := adsc.New(srcAddress.Host, &adsc.Config{
 				Namespace: args.Namespace,

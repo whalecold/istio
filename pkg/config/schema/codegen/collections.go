@@ -173,6 +173,15 @@ var (
 	{{- end }}
 		Build()
 
+	// PilotMCP contains only collections used by Pilot MCP.
+	PilotMCP = collection.NewSchemasBuilder().
+	{{- range .Entries }}
+		{{- if .Collection.Mcp }}
+		MustAdd({{ .Collection.VariableName }}).
+		{{- end}}
+	{{- end }}
+		Build()
+
 	// PilotGatewayAPI contains only collections used by Pilot, including experimental Service Api.
 	PilotGatewayAPI = collection.NewSchemasBuilder().
 	{{- range .Entries }}
