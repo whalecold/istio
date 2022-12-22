@@ -15,6 +15,9 @@
 package memory
 
 import (
+	"sync"
+
+	"go.uber.org/atomic"
 	"istio.io/istio/pilot/pkg/model"
 	config2 "istio.io/istio/pkg/config"
 	"istio.io/pkg/log"
@@ -48,6 +51,9 @@ type configStoreMonitor struct {
 	eventCh  chan ConfigEvent
 	// If enabled, events will be handled synchronously
 	sync bool
+
+	closed atomic.Bool
+	lock   sync.Locker
 }
 
 // NewMonitor returns new Monitor implementation with a default event buffer size.
@@ -55,13 +61,13 @@ func NewMonitor(store model.ConfigStore) Monitor {
 	return newBufferedMonitor(store, BufferSize, false)
 }
 
-// NewMonitor returns new Monitor implementation which will process events synchronously
+// NewSyncMonitor returns new Monitor implementation which will process events synchronously
 func NewSyncMonitor(store model.ConfigStore) Monitor {
 	return newBufferedMonitor(store, BufferSize, true)
 }
 
-// NewBufferedMonitor returns new Monitor implementation with the specified event buffer size
-func newBufferedMonitor(store model.ConfigStore, bufferSize int, sync bool) Monitor {
+// newBufferedMonitor returns new Monitor implementation with the specified event buffer size
+func newBufferedMonitor(store model.ConfigStore, bufferSize int, syncMod bool) Monitor {
 	handlers := make(map[config2.GroupVersionKind][]Handler)
 
 	for _, s := range store.Schemas().All() {
@@ -72,32 +78,48 @@ func newBufferedMonitor(store model.ConfigStore, bufferSize int, sync bool) Moni
 		store:    store,
 		handlers: handlers,
 		eventCh:  make(chan ConfigEvent, bufferSize),
-		sync:     sync,
+		sync:     syncMod,
+		lock:     &sync.RWMutex{},
 	}
 }
 
 func (m *configStoreMonitor) ScheduleProcessEvent(configEvent ConfigEvent) {
+	m.lock.Lock()
+	if m.closed.Load() {
+		m.lock.Unlock()
+		return
+	}
 	if m.sync {
+		m.lock.Unlock()
 		m.processConfigEvent(configEvent)
 	} else {
 		m.eventCh <- configEvent
+		m.lock.Unlock()
 	}
+}
+
+// waitAndCleanup the close action should after the stop closed to make sure all the
+// events in the chan have been consumed.
+func (m *configStoreMonitor) waitAndCleanup(stop <-chan struct{}) {
+	<-stop
+
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	m.closed.Store(true)
+	close(m.eventCh)
 }
 
 func (m *configStoreMonitor) Run(stop <-chan struct{}) {
 	if m.sync {
-		<-stop
+		m.waitAndCleanup(stop)
 		return
 	}
-	for {
-		select {
-		case <-stop:
-			return
-		case ce, ok := <-m.eventCh:
-			if ok {
-				m.processConfigEvent(ce)
-			}
-		}
+	// Run should
+	go m.waitAndCleanup(stop)
+
+	for ce := range m.eventCh {
+		m.processConfigEvent(ce)
 	}
 }
 

@@ -52,11 +52,13 @@ collections:
     kind: "ServiceEntry"
     group: "networking.istio.io"
     pilot: true
+    mcp: true
 
   - name: "istio/networking/v1alpha3/workloadentries"
     kind: "WorkloadEntry"
     group: "networking.istio.io"
     pilot: true
+    mcp: true
 
   - name: "istio/networking/v1alpha3/workloadgroups"
     kind: "WorkloadGroup"

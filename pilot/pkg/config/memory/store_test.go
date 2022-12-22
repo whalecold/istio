@@ -12,22 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package memory_test
+package memory
 
 import (
 	"testing"
 
-	"istio.io/istio/pilot/pkg/config/memory"
 	"istio.io/istio/pilot/test/mock"
 	"istio.io/istio/pkg/config/schema/collections"
 )
 
 func TestStoreInvariant(t *testing.T) {
-	store := memory.Make(collections.Mocks)
+	store := Make(collections.Mocks)
 	mock.CheckMapInvariant(store, t, "some-namespace", 10)
 }
 
 func TestIstioConfig(t *testing.T) {
-	store := memory.Make(collections.Pilot)
+	store := Make(collections.Pilot)
 	mock.CheckIstioConfigTypes(store, "some-namespace", t)
 }

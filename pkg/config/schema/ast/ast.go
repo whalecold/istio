@@ -41,6 +41,7 @@ type Collection struct {
 	Pilot        bool   `json:"pilot"`
 	Builtin      bool   `json:"builtin"`
 	Deprecated   bool   `json:"deprecated"`
+	Mcp          bool   `json:"mcp"`
 }
 
 // Resource metadata for resources contained within a collection.
