@@ -16,8 +16,10 @@
 package loadbalancer
 
 import (
+	"fmt"
 	"math"
 	"sort"
+	"strings"
 
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	endpoint "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
@@ -26,7 +28,10 @@ import (
 	"istio.io/api/networking/v1alpha3"
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pilot/pkg/networking/util"
+	"istio.io/pkg/log"
 )
+
+var LocalityLog = log.RegisterScope("locality", "locality debugging", 0)
 
 func GetLocalityLbSetting(
 	mesh *v1alpha3.LocalityLoadBalancerSetting,
@@ -65,7 +70,9 @@ func ApplyLocalityLBSetting(
 	localityLB *v1alpha3.LocalityLoadBalancerSetting,
 	enableFailover bool,
 ) {
+	LocalityLog.Info("ApplyLocalityLBSetting proxy label %v", proxyLabels)
 	if localityLB == nil || loadAssignment == nil {
+		LocalityLog.Info("nil localityLB or loadAssignment, return directly")
 		return
 	}
 
@@ -92,6 +99,7 @@ func applyLocalityWeight(
 		return
 	}
 
+	LocalityLog.Info("applyLocalityWeight start...")
 	// Support Locality weighted load balancing
 	// (https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/load_balancing/locality_weight#locality-weighted-load-balancing)
 	// by providing weights in LocalityLbEndpoints via load_balancing_weight.
@@ -142,6 +150,17 @@ func applyLocalityWeight(
 	}
 }
 
+func displayEndpointsInfo(eps []*endpoint.LbEndpoint) string {
+	var addrs []string
+	for _, ep := range eps {
+		addr := ep.GetEndpoint().Address.GetSocketAddress()
+		if addr != nil {
+			addrs = append(addrs, fmt.Sprintf("%s:%d", addr.GetAddress(), addr.GetPortValue()))
+		}
+	}
+	return strings.Join(addrs, ",")
+}
+
 // set locality loadbalancing priority
 func applyLocalityFailover(
 	locality *core.Locality,
@@ -150,6 +169,7 @@ func applyLocalityFailover(
 	// key is priority, value is the index of the LocalityLbEndpoints in ClusterLoadAssignment
 	priorityMap := map[int][]int{}
 
+	LocalityLog.Info("self locality info region: %s zone: %s", locality.GetRegion(), locality.GetZone())
 	// 1. calculate the LocalityLbEndpoints.Priority compared with proxy locality
 	for i, localityEndpoint := range loadAssignment.Endpoints {
 		// if region/zone/subZone all match, the priority is 0.
@@ -169,6 +189,8 @@ func applyLocalityFailover(
 				}
 			}
 		}
+		LocalityLog.Info("endpoint %s region: %s zone: %s priority %d", displayEndpointsInfo(localityEndpoint.LbEndpoints),
+			localityEndpoint.Locality.GetRegion(), localityEndpoint.Locality.GetZone(), priority)
 		loadAssignment.Endpoints[i].Priority = uint32(priority)
 		priorityMap[priority] = append(priorityMap[priority], i)
 	}
@@ -210,6 +232,7 @@ func applyPriorityFailover(
 	if len(proxyLabels) == 0 || len(wrappedLocalityLbEndpoints) == 0 {
 		return
 	}
+	LocalityLog.Info("applyPriorityFailover start...")
 	priorityMap := make(map[int][]int, len(failoverPriorities))
 	localityLbEndpoints := []*endpoint.LocalityLbEndpoints{}
 	for _, wrappedLbEndpoint := range wrappedLocalityLbEndpoints {

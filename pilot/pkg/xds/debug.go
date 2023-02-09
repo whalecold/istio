@@ -95,6 +95,7 @@ type AdsClient struct {
 	ConnectedAt  time.Time           `json:"connectedAt"`
 	PeerAddress  string              `json:"address"`
 	Metadata     *model.NodeMetadata `json:"metadata,omitempty"`
+	Locality     *core.Locality      `json:"locality,omitempty"`
 	Watches      map[string][]string `json:"watches,omitempty"`
 }
 
@@ -552,6 +553,7 @@ func (s *DiscoveryServer) adsz(w http.ResponseWriter, req *http.Request) {
 			ConnectionID: c.ConID,
 			ConnectedAt:  c.Connect,
 			PeerAddress:  c.PeerAddr,
+			Locality:     c.proxy.Locality,
 			Metadata:     c.proxy.Metadata,
 			Watches:      map[string][]string{},
 		}
