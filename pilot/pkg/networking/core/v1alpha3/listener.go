@@ -82,6 +82,8 @@ const (
 	// ProxyInboundListenPort is the port on which all inbound traffic to the pod/vm will be captured to
 	// TODO: allow configuration through mesh config
 	ProxyInboundListenPort = 15006
+	// IstioWorkloadPort overrides the endpoint port value with service port to use for custome portmap.
+	IstioWorkloadPortLabel = "sidecar.mesh.io/overwrite-workload-port"
 )
 
 // MutableListener represents a listener that is being built.
@@ -289,6 +291,11 @@ func (configgen *ConfigGeneratorImpl) buildSidecarInboundListeners(
 			// redirected by remote services' kubeproxy to our specific endpoint IP.
 			port := *instance.ServicePort
 			port.Port = int(endpoint.EndpointPort)
+
+			if val, ok := instance.Service.Attributes.Labels[IstioWorkloadPortLabel]; ok && val == "true" {
+				port.Port = instance.ServicePort.Port
+			}
+
 			listenerOpts := buildListenerOpts{
 				push:       push,
 				proxy:      node,
