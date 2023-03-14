@@ -1,5 +1,7 @@
 package httpserver
 
+import "k8s.io/apimachinery/pkg/labels"
+
 // Error ...
 type Error struct {
 	Code    int               `json:"code,omitempty"`
@@ -25,9 +27,9 @@ type ListOptions struct {
 	Name      string `query:"name"`
 	Namespace string `query:"namespace"`
 	// If Start and Limit are all zero, return all the resource meet the others conditions.
-	Start  int               `query:"start" default:"0"`
-	Limit  int               `query:"limit" default:"10"`
-	Labels map[string]string `json:"labels"`
+	Start    int `query:"start" default:"0"`
+	Limit    int `query:"limit" default:"10"`
+	Selector labels.Selector
 }
 
 // GetOption get option

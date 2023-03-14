@@ -12,6 +12,7 @@ import (
 	networkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	clientv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/pkg/errors"
 	"istio.io/istio/pilot/pkg/model"
@@ -167,7 +168,6 @@ func (s *server) parseListOptions(request *http.Request) (*ListOptions, error) {
 		Kind:      request.URL.Query().Get("kind"),
 		Name:      request.URL.Query().Get("name"),
 		Namespace: request.URL.Query().Get("namespace"),
-		Labels:    map[string]string{},
 	}
 
 	if opts.Kind == "" {
@@ -191,6 +191,9 @@ func (s *server) parseListOptions(request *http.Request) (*ListOptions, error) {
 			return nil, errors.Errorf("limit %s should less than 100", limit)
 		}
 	}
+	if opts.Limit == 0 {
+		opts.Limit = 10
+	}
 	defer request.Body.Close()
 
 	b, err := io.ReadAll(request.Body)
@@ -198,7 +201,7 @@ func (s *server) parseListOptions(request *http.Request) (*ListOptions, error) {
 		return nil, errors.Wrapf(err, "io read all failed")
 	}
 	if len(b) != 0 {
-		err = json.Unmarshal(b, &opts.Labels)
+		opts.Selector, err = labels.Parse(string(b))
 		if err != nil {
 			return nil, errors.Wrapf(err, "error format of labels %s", string(b))
 		}
@@ -270,28 +273,22 @@ func paginateResource(options *ListOptions, list []config.Config) []config.Confi
 }
 
 func filterByOptions(configs []config.Config, opts *ListOptions) []config.Config {
-	if len(opts.Labels) == 0 && opts.Name == "" {
+	if opts.Selector == nil && opts.Name == "" {
 		return configs
 	}
 	var idx int
 	for i := range configs {
-		if isMatchMap(opts.Labels, configs[i].Labels) && strings.Contains(configs[i].Name, opts.Name) {
-			configs[idx] = configs[i]
-			idx += 1
+		if opts.Name != "" && !strings.Contains(configs[i].Name, opts.Name) {
+			continue
 		}
+		if opts.Selector != nil && !opts.Selector.Matches(labels.Set(configs[i].Labels)) {
+			continue
+		}
+		configs[idx] = configs[i]
+		idx += 1
 	}
 	configs = configs[:idx]
 	return configs
-}
-
-// isMatchMap checks the map if is the subset of the others.
-func isMatchMap(sub, parent map[string]string) bool {
-	for k, v := range sub {
-		if pv, ok := parent[k]; !ok || v != pv {
-			return false
-		}
-	}
-	return true
 }
 
 // sortConfigByCreationTime sorts the list of config objects in ascending order by their creation time (if available).
