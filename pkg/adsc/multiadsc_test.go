@@ -50,11 +50,11 @@ func TestSyncHandler(t *testing.T) {
 			}, nil
 		},
 		adscs: make(map[string]xdsclient.XDSClient),
-		store: mcpaggregate.MakeCache(),
+		store: mcpaggregate.MakeCache(collections.PilotMCP),
 	}
 
 	// add
-	err := m.syncHandler([]*mcpdiscovery.McpServer{
+	err := m.OnServersUpdate([]*mcpdiscovery.McpServer{
 		{
 			ID:      "client",
 			Address: "127.0.0.1:8080",
@@ -65,7 +65,7 @@ func TestSyncHandler(t *testing.T) {
 	g.Expect(adsc.GetURL()).To(gomega.Equal("127.0.0.1:8080"))
 
 	// chang
-	err = m.syncHandler([]*mcpdiscovery.McpServer{
+	err = m.OnServersUpdate([]*mcpdiscovery.McpServer{
 		{
 			ID:      "client",
 			Address: "127.0.0.1:8081",
@@ -82,7 +82,7 @@ func TestSyncHandler(t *testing.T) {
 	g.Expect(adsc.GetURL()).To(gomega.Equal("127.0.0.1:8080"))
 
 	// remove
-	err = m.syncHandler([]*mcpdiscovery.McpServer{
+	err = m.OnServersUpdate([]*mcpdiscovery.McpServer{
 		{
 			ID:      "client2",
 			Address: "127.0.0.1:8080",

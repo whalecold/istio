@@ -32,7 +32,10 @@ func TestRegisterMcpServerAddress(t *testing.T) {
 	}))
 
 	// register the second one.
-	err = r.DeRegister(ctx, "a2")
+	err = r.Register(ctx, McpServer{
+		ID:      "a2",
+		Address: "127.0.0.1:8181",
+	})
 	g.Expect(err).To(gomega.BeNil())
 
 	cm, err = cli.CoreV1().ConfigMaps(constants.IstioSystemNamespace).Get(ctx, configmapName, metav1.GetOptions{})

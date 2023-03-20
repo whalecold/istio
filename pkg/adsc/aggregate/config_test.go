@@ -24,12 +24,13 @@ func TestAggregateStoreScheme(t *testing.T) {
 	controller1 := memory.NewController(store1)
 	controller2 := memory.NewController(store2)
 
-	store := MakeCache()
+	store := MakeCache(collection.Schemas{})
 	store.AddStore("c1", controller1)
 	store.AddStore("c2", controller2)
 
 	schemas := store.Schemas()
 	g.Expect(schemas.All()).To(gomega.HaveLen(2))
+
 	fixtures.ExpectEqual(t, schemas, collection.SchemasFor(schema1, schema2))
 
 	store.RemoveStore("c1")
@@ -55,7 +56,7 @@ func TestAggregateStoreGetAndRemove(t *testing.T) {
 	_, err := store1.Create(*configReturn)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	store := MakeCache()
+	store := MakeCache(collection.Schemas{})
 	// add the store
 	store.AddStore("store1", controller1)
 
@@ -97,7 +98,7 @@ func TestOverWriteAggregateStoreGet(t *testing.T) {
 	_, err = controller2.Create(*configReturn2)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	store := MakeCache()
+	store := MakeCache(collection.Schemas{})
 	store.AddStore("store1", controller1)
 	store.AddStore("store1", controller2)
 
@@ -136,7 +137,7 @@ func TestAggregateStoreList(t *testing.T) {
 	_, err = controller2.Create(*configReturn2)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	store := MakeCache()
+	store := MakeCache(collection.Schemas{})
 	store.AddStore("store1", controller1)
 	store.AddStore("store2", controller2)
 
@@ -163,7 +164,7 @@ func TestAggregateStoreRegisterEventHandler(t *testing.T) {
 		},
 	}
 
-	store := MakeCache()
+	store := MakeCache(collection.Schemas{})
 	store.RegisterEventHandler(gvk.GatewayClass, func(c config.Config, c2 config.Config, event model.Event) {
 		changed = true
 	})

@@ -70,7 +70,7 @@ func NewMultiADSC(cfg *Config) (*MultiADSC, error) {
 		cfg:            cfg,
 		adscs:          make(map[string]xdsclient.XDSClient),
 		nodeID:         nodeID(),
-		store:          mcpaggregate.MakeCache(),
+		store:          mcpaggregate.MakeCache(collections.PilotMCP),
 		buildXDSClient: xdsclient.New,
 	}
 	return md, nil

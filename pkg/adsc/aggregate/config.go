@@ -9,7 +9,6 @@ import (
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/schema/collection"
-	"istio.io/istio/pkg/config/schema/collections"
 )
 
 // ConfigStoreCache the wrapper of model.ConfigStoreCache, add the external AddStore and RemoveStore function to
@@ -50,12 +49,12 @@ type store struct {
 }
 
 // MakeCache creates an aggregate config store cache. Could add or remove several config store cache dynamically.
-func MakeCache() ConfigStoreCache {
+func MakeCache(defaultScheme collection.Schemas) ConfigStoreCache {
 	s := &store{
 		stores: map[config.GroupVersionKind]map[string]model.ConfigStore{},
 		caches: map[string]model.ConfigStoreCache{},
 	}
-	s.defaultScheme = collections.PilotMCP
+	s.defaultScheme = defaultScheme
 	s.rebuildScheme()
 	return s
 }
