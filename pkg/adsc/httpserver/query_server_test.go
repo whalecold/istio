@@ -21,14 +21,14 @@ func TestParseListOptions(t *testing.T) {
 		want *ListOptions
 	}{
 		{
-			url:  "http://127.0.0.1:18001/mcp.istio.io/v1alpha1/resource?namespace=ns&query=hello&start=10&q=q2&limit=2&kind=serviceentry&name=hello",
+			url:  "http://127.0.0.1:18001/mcp.istio.io/v1alpha1/resource?namespaces=ns&start=10&q=q2&limit=2&kind=serviceentry&keyword=hello",
 			body: `a=apple,b=banana`,
 			want: &ListOptions{
-				Kind:      "serviceentry",
-				Name:      "hello",
-				Namespace: "ns",
-				Start:     10,
-				Limit:     2,
+				Kind:       "serviceentry",
+				Keyword:    "hello",
+				Namespaces: map[string]bool{"ns": true},
+				Start:      10,
+				Limit:      2,
 				Selector: labels.SelectorFromSet(labels.Set{
 					"a": "apple",
 					"b": "banana",
@@ -36,13 +36,13 @@ func TestParseListOptions(t *testing.T) {
 			},
 		},
 		{
-			url: "http://127.0.0.1:18001/mcp.istio.io/v1alpha1/resource?namespace=ns&query=hello&q=q2&kind=workloadentry&name=hello",
+			url: "http://127.0.0.1:18001/mcp.istio.io/v1alpha1/resource?namespaces=ns,ns1&query=hello&q=q2&kind=workloadentry&keyword=hello",
 			want: &ListOptions{
-				Kind:      "workloadentry",
-				Name:      "hello",
-				Namespace: "ns",
-				Start:     0,
-				Limit:     10,
+				Kind:       "workloadentry",
+				Keyword:    "hello",
+				Namespaces: map[string]bool{"ns": true, "ns1": true},
+				Start:      0,
+				Limit:      10,
 			},
 		},
 	}
@@ -127,7 +127,7 @@ func TestFilterByOptions(t *testing.T) {
 			},
 			want: []config.Config{},
 			opts: &ListOptions{
-				Name: "c2",
+				Keyword: "c2",
 				Selector: labels.SelectorFromSet(labels.Set{
 					"version": "v1",
 				}),

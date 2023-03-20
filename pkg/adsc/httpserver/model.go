@@ -2,6 +2,16 @@ package httpserver
 
 import "k8s.io/apimachinery/pkg/labels"
 
+const (
+	queryParameterName       = "name"
+	queryParameterNamespace  = "namespace"
+	queryParameterNamespaces = "namespaces"
+	queryParameterKeyword    = "keyword"
+	queryParameterKind       = "kind"
+	queryParameterStart      = "start"
+	queryParameterLimit      = "limit"
+)
+
 // Error ...
 type Error struct {
 	Code    int               `json:"code,omitempty"`
@@ -23,13 +33,36 @@ type ResourceList struct {
 
 // ListOptions ...
 type ListOptions struct {
-	Kind      string `query:"kind"`
-	Name      string `query:"name"`
-	Namespace string `query:"namespace"`
+	Kind       string `query:"kind"`
+	Keyword    string `query:"keyword"`
+	Namespaces map[string]bool
 	// If Start and Limit are all zero, return all the resource meet the others conditions.
 	Start    int `query:"start" default:"0"`
 	Limit    int `query:"limit" default:"10"`
 	Selector labels.Selector
+}
+
+// Namespace if there is only one namespace in the map, return
+// it as it can be used to list the specified resource. If the
+// query multiple namespace parameters, should return empty string
+// to capture all resources and filter them through the `InNamespaces`
+// function.
+func (l *ListOptions) Namespace() string {
+	if len(l.Namespaces) != 1 {
+		return ""
+	}
+	for ns := range l.Namespaces {
+		return ns
+	}
+	return ""
+}
+
+// InNamespaces checks the namespace if in the map.
+func (l *ListOptions) InNamespaces(ns string) bool {
+	if len(l.Namespaces) == 0 {
+		return true
+	}
+	return l.Namespaces[ns]
 }
 
 // GetOption get option

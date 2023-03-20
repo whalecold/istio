@@ -153,9 +153,9 @@ func convertToK8sMate(meta config.Meta) metav1.ObjectMeta {
 
 func (s *server) parseGetOption(request *http.Request) (*GetOption, error) {
 	opts := &GetOption{
-		Kind:      request.URL.Query().Get("kind"),
-		Name:      request.URL.Query().Get("name"),
-		Namespace: request.URL.Query().Get("namespace"),
+		Kind:      request.URL.Query().Get(queryParameterKind),
+		Name:      request.URL.Query().Get(queryParameterName),
+		Namespace: request.URL.Query().Get(queryParameterNamespace),
 	}
 	if opts.Kind == "" || opts.Name == "" || opts.Namespace == "" {
 		return nil, fmt.Errorf("the parameter should not be empty")
@@ -165,16 +165,22 @@ func (s *server) parseGetOption(request *http.Request) (*GetOption, error) {
 
 func (s *server) parseListOptions(request *http.Request) (*ListOptions, error) {
 	opts := &ListOptions{
-		Kind:      request.URL.Query().Get("kind"),
-		Name:      request.URL.Query().Get("name"),
-		Namespace: request.URL.Query().Get("namespace"),
+		Kind:       request.URL.Query().Get(queryParameterKind),
+		Keyword:    request.URL.Query().Get(queryParameterKeyword),
+		Namespaces: map[string]bool{},
+	}
+
+	nss := strings.Split(request.URL.Query().Get(queryParameterNamespaces), ",")
+	for _, ns := range nss {
+		opts.Namespaces[ns] = true
 	}
 
 	if opts.Kind == "" {
+		// default to serviceentry
 		opts.Kind = "serviceentry"
 	}
 	var err error
-	start, limit := request.URL.Query().Get("start"), request.URL.Query().Get("limit")
+	start, limit := request.URL.Query().Get(queryParameterStart), request.URL.Query().Get(queryParameterLimit)
 	if start != "" {
 		opts.Start, err = strconv.Atoi(start)
 		if err != nil {
@@ -244,7 +250,7 @@ func (s *server) ListResourceHandler() http.Handler {
 			return
 		}
 
-		list, err := s.store.List(gvkInfo, options.Namespace)
+		list, err := s.store.List(gvkInfo, options.Namespace())
 		if err != nil {
 			s.errorResponseHandler(c, err, http.StatusInternalServerError)
 			return
@@ -273,12 +279,15 @@ func paginateResource(options *ListOptions, list []config.Config) []config.Confi
 }
 
 func filterByOptions(configs []config.Config, opts *ListOptions) []config.Config {
-	if opts.Selector == nil && opts.Name == "" {
+	if opts.Selector == nil && opts.Keyword == "" {
 		return configs
 	}
 	var idx int
 	for i := range configs {
-		if opts.Name != "" && !strings.Contains(configs[i].Name, opts.Name) {
+		if !opts.InNamespaces(configs[i].Namespace) {
+			continue
+		}
+		if opts.Keyword != "" && !strings.Contains(configs[i].Name, opts.Keyword) {
 			continue
 		}
 		if opts.Selector != nil && !opts.Selector.Matches(labels.Set(configs[i].Labels)) {
@@ -297,9 +306,9 @@ func sortConfigByCreationTime(configs []config.Config) {
 		// If creation time is the same, then behavior is nondeterministic. In this case, we can
 		// pick an arbitrary but consistent ordering based on name and namespace, which is unique.
 		// CreationTimestamp is stored in seconds, so this is not uncommon.
-		if configs[i].CreationTimestamp == configs[j].CreationTimestamp {
-			in := configs[i].Name + "." + configs[i].Namespace
-			jn := configs[j].Name + "." + configs[j].Namespace
+		if configs[i].CreationTimestamp.Equal(configs[j].CreationTimestamp) {
+			in := configs[i].Namespace + "." + configs[i].Name
+			jn := configs[j].Namespace + "." + configs[j].Name
 			return in < jn
 		}
 		return configs[i].CreationTimestamp.After(configs[j].CreationTimestamp)
