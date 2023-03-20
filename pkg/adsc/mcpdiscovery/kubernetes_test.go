@@ -16,8 +16,10 @@ func TestRegisterMcpServerAddress(t *testing.T) {
 	cli := kube.NewFakeClient()
 	ctx := context.Background()
 
+	r := New(cli.Kube(), &Options{})
+
 	// register the first one.
-	err := RegisterMcpServerAddress(ctx, cli, McpServer{
+	err := r.Register(ctx, McpServer{
 		ID:      "a1",
 		Address: "127.0.0.1:8080",
 	})
@@ -30,10 +32,7 @@ func TestRegisterMcpServerAddress(t *testing.T) {
 	}))
 
 	// register the second one.
-	err = RegisterMcpServerAddress(ctx, cli, McpServer{
-		ID:      "a2",
-		Address: "127.0.0.1:8181",
-	})
+	err = r.DeRegister(ctx, "a2")
 	g.Expect(err).To(gomega.BeNil())
 
 	cm, err = cli.CoreV1().ConfigMaps(constants.IstioSystemNamespace).Get(ctx, configmapName, metav1.GetOptions{})
@@ -44,10 +43,7 @@ func TestRegisterMcpServerAddress(t *testing.T) {
 	}))
 
 	// log off.
-	err = LogOffMcpServerAddress(ctx, cli, McpServer{
-		ID:      "a3",
-		Address: "127.0.0.1:8181",
-	})
+	err = r.DeRegister(ctx, "a3")
 	g.Expect(err).To(gomega.BeNil())
 
 	cm, err = cli.CoreV1().ConfigMaps(constants.IstioSystemNamespace).Get(ctx, configmapName, metav1.GetOptions{})
@@ -57,10 +53,7 @@ func TestRegisterMcpServerAddress(t *testing.T) {
 		"a2": "127.0.0.1:8181",
 	}))
 
-	err = LogOffMcpServerAddress(ctx, cli, McpServer{
-		ID:      "a1",
-		Address: "127.0.0.1:8181",
-	})
+	err = r.DeRegister(ctx, "a1")
 	g.Expect(err).To(gomega.BeNil())
 
 	cm, err = cli.CoreV1().ConfigMaps(constants.IstioSystemNamespace).Get(ctx, configmapName, metav1.GetOptions{})

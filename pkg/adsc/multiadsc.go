@@ -21,7 +21,7 @@ var (
 	InstanceIPVar   = env.RegisterStringVar("INSTANCE_IP", "", "")
 	PodNameVar      = env.RegisterStringVar("POD_NAME", "", "pod name")
 	PodNamespaceVar = env.RegisterStringVar("POD_NAMESPACE", "", "the pod name space")
-	QueryServerPort = env.RegisterIntVar("MCP_SERVER_PORT", 18001, "the port for mcp query server.")
+	QueryServerPort = env.RegisterIntVar("MCP_SERVER_PORT", 15081, "the port for mcp query server.")
 )
 
 // ConfigMultiADSCInitialRequests the multi adsc init requests.
