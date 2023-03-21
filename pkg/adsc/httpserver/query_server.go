@@ -28,24 +28,24 @@ const (
 type server struct {
 	port  int
 	store model.ConfigStore
-	// storeKindMap use to store the relation with query kind and gvk info.
-	storeKindMap map[string]config.GroupVersionKind
-	convertMap   map[config.GroupVersionKind]func(config.GroupVersionKind, *config.Config) interface{}
+	// stores the relationship with query type and gvk info.
+	kinds    map[string]config.GroupVersionKind
+	handlers map[config.GroupVersionKind]func(config.GroupVersionKind, *config.Config) interface{}
 }
 
-// NewQueryServer new query server.
-func NewQueryServer(store model.ConfigStore, port int) *server {
+// New new query server.
+func New(store model.ConfigStore, p int) *server {
 	s := &server{
 		store: store,
-		port:  port,
+		port:  p,
 	}
-	s.storeKindMap = map[string]config.GroupVersionKind{
+	s.kinds = map[string]config.GroupVersionKind{
 		serviceEntryKind:  gvk.ServiceEntry,
 		workloadEntryKind: gvk.WorkloadEntry,
 	}
-	s.convertMap = map[config.GroupVersionKind]func(config.GroupVersionKind, *config.Config) interface{}{
-		gvk.ServiceEntry:  s.convertToK8sServiceEntry,
-		gvk.WorkloadEntry: s.convertToK8sWorkloadEntry,
+	s.handlers = map[config.GroupVersionKind]func(config.GroupVersionKind, *config.Config) interface{}{
+		gvk.ServiceEntry:  convertToK8sServiceEntry,
+		gvk.WorkloadEntry: convertToK8sWorkloadEntry,
 	}
 	return s
 }
@@ -61,77 +61,74 @@ func (s *server) Run() {
 	}
 }
 
-// errorResponseHandler handle the error response.
-func errorResponseHandler(c http.ResponseWriter, err error, code int) {
+func handleErrorResponse(w http.ResponseWriter, err error, code int) {
 	resp := &Response{
 		Error: &Error{
 			Code:    code,
 			Message: err.Error(),
 		},
 	}
-	c.WriteHeader(code)
+	w.WriteHeader(code)
 	out, _ := json.Marshal(resp)
-	c.Write(out)
+	w.Write(out)
 }
 
-// httpGetResourceHandler handle the response.
-func (s *server) httpGetResourceHandler(c http.ResponseWriter, gvkInfo config.GroupVersionKind, res *config.Config) {
-	handler, ok := s.convertMap[gvkInfo]
+func (s *server) handleResponse(w http.ResponseWriter, gvk config.GroupVersionKind, conf *config.Config) {
+	handler, ok := s.handlers[gvk]
 	if !ok {
-		errorResponseHandler(c, fmt.Errorf("the kind %v is not support", gvkInfo), http.StatusBadRequest)
+		handleErrorResponse(w, fmt.Errorf("the kind %v is not support", gvk), http.StatusBadRequest)
 		return
 	}
-	response := handler(gvkInfo, res)
-	out, _ := json.Marshal(response)
-	c.WriteHeader(http.StatusOK)
-	c.Write(out)
+	r := handler(gvk, conf)
+	out, _ := json.Marshal(r)
+	w.WriteHeader(http.StatusOK)
+	w.Write(out)
 }
 
-// httpResourceHandler handle the response.
-func (s *server) httpResourceHandler(c http.ResponseWriter, gvkInfo config.GroupVersionKind, total int, res []config.Config) {
+func (s *server) handleResponses(w http.ResponseWriter, gvk config.GroupVersionKind, total int, confs []config.Config) {
 	ret := &ResourceList{
 		Total: total,
 	}
-	handler, ok := s.convertMap[gvkInfo]
+	handler, ok := s.handlers[gvk]
 	if !ok {
-		errorResponseHandler(c, fmt.Errorf("the kind %v is not support", gvkInfo), http.StatusBadRequest)
+		handleErrorResponse(w, fmt.Errorf("the kind %v is not support", gvk), http.StatusBadRequest)
 		return
 	}
 
-	items := make([]interface{}, 0, len(res))
-
-	for idx := range res {
-		r := &res[idx]
-		items = append(items, handler(gvkInfo, r))
+	items := make([]interface{}, 0, len(confs))
+	for idx := range confs {
+		r := &confs[idx]
+		items = append(items, handler(gvk, r))
 	}
 	ret.Items = items
+
 	response := &Response{
 		Result: ret,
 	}
 	out, _ := json.Marshal(response)
-	c.WriteHeader(http.StatusOK)
-	c.Write(out)
+	w.WriteHeader(http.StatusOK)
+	w.Write(out)
 }
 
-func (s *server) convertToK8sWorkloadEntry(gvkInfo config.GroupVersionKind, res *config.Config) interface{} {
+func convertToK8sWorkloadEntry(gvk config.GroupVersionKind, res *config.Config) interface{} {
 	we, ok := res.Spec.(*networkingv1alpha3.WorkloadEntry)
 	if !ok {
 		return nil
 	}
 	return &clientv1alpha3.WorkloadEntry{
-		TypeMeta:   convertToK8sType(gvkInfo),
+		TypeMeta:   convertToK8sType(gvk),
 		ObjectMeta: convertToK8sMate(res.Meta),
 		Spec:       *we,
 	}
 }
 
-func (s *server) convertToK8sServiceEntry(gvkInfo config.GroupVersionKind, res *config.Config) interface{} {
+func convertToK8sServiceEntry(gvk config.GroupVersionKind, res *config.Config) interface{} {
 	se, ok := res.Spec.(*networkingv1alpha3.ServiceEntry)
 	if !ok {
 		return nil
 	}
 	return &clientv1alpha3.ServiceEntry{
-		TypeMeta:   convertToK8sType(gvkInfo),
+		TypeMeta:   convertToK8sType(gvk),
 		ObjectMeta: convertToK8sMate(res.Meta),
 		Spec:       *se,
 	}
@@ -168,146 +165,163 @@ func parseGetOption(request *http.Request) (*GetOption, error) {
 	return opts, nil
 }
 
-func parseListOptions(request *http.Request) (*ListOptions, error) {
-	opts := &ListOptions{
-		Kind:       request.URL.Query().Get(queryParameterKind),
-		Keyword:    request.URL.Query().Get(queryParameterKeyword),
-		Namespaces: map[string]bool{},
+func stringDef(in string, def string) string {
+	if in == "" {
+		return def
 	}
+	return in
+}
 
-	nsStr := request.URL.Query().Get(queryParameterNamespaces)
-	if nsStr != "" {
-		nss := strings.Split(nsStr, ",")
-		for _, ns := range nss {
-			opts.Namespaces[ns] = true
-		}
+func parseNamespaces(namespaces string) map[string]bool {
+	if namespaces == "" {
+		return nil
 	}
+	ret := map[string]bool{}
+	nss := strings.Split(namespaces, ",")
+	for _, ns := range nss {
+		ret[ns] = true
+	}
+	return ret
+}
 
-	if opts.Kind == "" {
-		// default to serviceentry
-		opts.Kind = serviceEntryKind
-	}
-	var err error
-	start, limit := request.URL.Query().Get(queryParameterStart), request.URL.Query().Get(queryParameterLimit)
-	if start != "" {
-		opts.Start, err = strconv.Atoi(start)
+func parseStartAndLimit(sta, lim string) (start int, limit int, err error) {
+	if sta != "" {
+		start, err = strconv.Atoi(sta)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error format of start %s", start)
+			return 0, 0, errors.Wrapf(err, "error format of start %s", sta)
 		}
 	}
 
-	if limit != "" {
-		opts.Limit, err = strconv.Atoi(limit)
+	if lim != "" {
+		limit, err = strconv.Atoi(lim)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error format of limit %s", limit)
+			return 0, 0, errors.Wrapf(err, "error format of limit %s", lim)
 		}
-		if opts.Limit > 100 {
-			return nil, errors.Errorf("limit %s should less than 100", limit)
+		if limit > 100 {
+			return 0, 0, errors.Errorf("limit %s should less than 100", lim)
 		}
 	}
-	if opts.Limit == 0 {
-		opts.Limit = 10
+	if limit == 0 {
+		limit = 10
 	}
+	return
+}
 
+func parseSelector(request *http.Request) (labels.Selector, error) {
 	b, err := io.ReadAll(request.Body)
 	if err != nil {
 		return nil, errors.Wrapf(err, "io read all failed")
 	}
 	defer request.Body.Close()
 
+	var selector labels.Selector
 	if len(b) != 0 {
-		opts.Selector, err = labels.Parse(string(b))
+		selector, err = labels.Parse(string(b))
 		if err != nil {
 			return nil, errors.Wrapf(err, "error format of labels %s", string(b))
 		}
 	}
-	return opts, nil
+	return selector, nil
+}
+
+func parseListOptions(request *http.Request) (*ListOptions, error) {
+	opts := &ListOptions{
+		Keyword:    request.URL.Query().Get(queryParameterKeyword),
+		Kind:       stringDef(request.URL.Query().Get(queryParameterKind), serviceEntryKind),
+		Namespaces: parseNamespaces(request.URL.Query().Get(queryParameterNamespaces)),
+	}
+
+	var err error
+	opts.Start, opts.Limit, err = parseStartAndLimit(request.URL.Query().Get(queryParameterStart),
+		request.URL.Query().Get(queryParameterLimit))
+	if err != nil {
+		return nil, err
+	}
+
+	opts.Selector, err = parseSelector(request)
+
+	return opts, err
 }
 
 func (s *server) GetResourceHandler() http.Handler {
-	return http.HandlerFunc(func(c http.ResponseWriter, request *http.Request) {
-		opts, err := parseGetOption(request)
+	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		opt, err := parseGetOption(request)
 		if err != nil {
-			errorResponseHandler(c, err, http.StatusBadRequest)
+			handleErrorResponse(w, err, http.StatusBadRequest)
 			return
 		}
-		gvkInfo, ok := s.storeKindMap[opts.Kind]
+		gvk, ok := s.kinds[opt.Kind]
 		if !ok {
-			errorResponseHandler(c, fmt.Errorf("the kind %s is not support", opts.Kind), http.StatusBadRequest)
+			handleErrorResponse(w, fmt.Errorf("the kind %s is not support", opt.Kind), http.StatusBadRequest)
 			return
 		}
 
-		obj := s.store.Get(gvkInfo, opts.Name, opts.Namespace)
+		obj := s.store.Get(gvk, opt.Name, opt.Namespace)
 		if obj == nil {
-			errorResponseHandler(c, fmt.Errorf("%s/%s/%s not found", opts.Kind, opts.Name, opts.Namespace), http.StatusNotFound)
+			handleErrorResponse(w, fmt.Errorf("%s/%s/%s not found", opt.Kind, opt.Name, opt.Namespace), http.StatusNotFound)
 			return
 		}
-		s.httpGetResourceHandler(c, gvkInfo, obj)
+		s.handleResponse(w, gvk, obj)
 	})
 }
 
 func (s *server) ListResourceHandler() http.Handler {
-	return http.HandlerFunc(func(c http.ResponseWriter, request *http.Request) {
-		options, err := parseListOptions(request)
+	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		opt, err := parseListOptions(request)
 		if err != nil {
-			errorResponseHandler(c, err, http.StatusBadRequest)
+			handleErrorResponse(w, err, http.StatusBadRequest)
 			return
 		}
-		gvkInfo, ok := s.storeKindMap[options.Kind]
+		gvk, ok := s.kinds[opt.Kind]
 		if !ok {
-			errorResponseHandler(c, fmt.Errorf("the kind %s is not support", options.Kind), http.StatusBadRequest)
+			handleErrorResponse(w, fmt.Errorf("the kind %s is not support", opt.Kind), http.StatusBadRequest)
 			return
 		}
 
-		list, err := s.store.List(gvkInfo, options.Namespace())
+		cfgs, err := s.store.List(gvk, opt.Namespace())
 		if err != nil {
-			errorResponseHandler(c, err, http.StatusInternalServerError)
+			handleErrorResponse(w, err, http.StatusInternalServerError)
 			return
 		}
 
-		list = filterByOptions(list, options)
-		total := len(list)
-		sortConfigByCreationTime(list)
-		s.httpResourceHandler(c, gvkInfo, total, paginateResource(options, list))
+		cfgs = filterByOptions(cfgs, opt)
+		sortConfigByCreationTime(cfgs)
+		total, cfgs := paginateResource(opt, cfgs)
+		s.handleResponses(w, gvk, total, cfgs)
 	})
 }
 
-func paginateResource(options *ListOptions, list []config.Config) []config.Config {
-	start, limit := options.Start, options.Limit
-	if limit == 0 {
-		limit = 10
-	}
-	if start >= len(list) {
-		start = len(list)
+func paginateResource(opt *ListOptions, cfgs []config.Config) (total int, ret []config.Config) {
+	total = len(cfgs)
+	start, limit := opt.Start, opt.Limit
+	if start >= len(cfgs) {
+		start = len(cfgs)
 	}
 	end := start + limit
-	if end >= len(list) {
-		end = len(list)
+	if end >= len(cfgs) {
+		end = len(cfgs)
 	}
-	return list[start:end]
+	ret = cfgs[start:end]
+	return
 }
 
-func filterByOptions(configs []config.Config, opts *ListOptions) []config.Config {
-	if opts.Selector == nil && opts.Keyword == "" {
-		return configs
+func filterByOptions(cfgs []config.Config, opts *ListOptions) []config.Config {
+	if opts.IsEmpty() {
+		return cfgs
 	}
+
 	var idx int
-	for i := range configs {
-		cfg := &configs[i]
-		if !opts.InNamespaces(cfg.Namespace) {
+	for i := range cfgs {
+		cfg := &cfgs[i]
+		if !opts.InNamespaces(cfg.Namespace) ||
+			!opts.Matchs(labels.Set(cfg.Labels)) ||
+			!opts.Contains(cfg.Name) {
 			continue
 		}
-		if opts.Keyword != "" && !strings.Contains(cfg.Name, opts.Keyword) {
-			continue
-		}
-		if opts.Selector != nil && !opts.Selector.Matches(labels.Set(cfg.Labels)) {
-			continue
-		}
-		configs[idx] = configs[i]
+		cfgs[idx] = cfgs[i]
 		idx += 1
 	}
-	configs = configs[:idx]
-	return configs
+	return cfgs[:idx]
 }
 
 // sortConfigByCreationTime sorts the list of config objects in ascending order by their creation time (if available).

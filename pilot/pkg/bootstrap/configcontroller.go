@@ -270,7 +270,7 @@ func (s *Server) initConfigSources(args *PilotArgs) (err error) {
 			}
 			discovery.RegisterHandler(multiMCP)
 
-			go multiMCP.RunQueryServer()
+			go multiMCP.Run()
 			go discovery.Run(make(chan struct{}))
 
 			s.ConfigStores = append(s.ConfigStores, multiMCP.GetStore())

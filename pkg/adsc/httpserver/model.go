@@ -1,6 +1,10 @@
 package httpserver
 
-import "k8s.io/apimachinery/pkg/labels"
+import (
+	"strings"
+
+	"k8s.io/apimachinery/pkg/labels"
+)
 
 const (
 	queryParameterName       = "name"
@@ -36,10 +40,29 @@ type ListOptions struct {
 	Kind       string `query:"kind"`
 	Keyword    string `query:"keyword"`
 	Namespaces map[string]bool
+	Selector   labels.Selector
 	// If Start and Limit are all zero, return all the resource meet the others conditions.
-	Start    int `query:"start" default:"0"`
-	Limit    int `query:"limit" default:"10"`
-	Selector labels.Selector
+	Start int `query:"start" default:"0"`
+	Limit int `query:"limit" default:"10"`
+}
+
+func (l *ListOptions) IsEmpty() bool {
+	return l.Selector == nil && l.Keyword == "" && len(l.Namespaces) == 0
+}
+
+func (l *ListOptions) Contains(name string) bool {
+	if l.Keyword == "" {
+		return true
+	}
+	return strings.Contains(name, l.Keyword)
+}
+
+// Matchs ...
+func (l *ListOptions) Matchs(set labels.Labels) bool {
+	if l.Selector == nil {
+		return true
+	}
+	return l.Selector.Matches(set)
 }
 
 // Namespace if there is only one namespace in the map, return

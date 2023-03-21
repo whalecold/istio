@@ -270,7 +270,7 @@ func TestPaginateResource(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		got := paginateResource(tc.opts, tc.input)
+		_, got := paginateResource(tc.opts, tc.input)
 		g.Expect(got).To(gomega.Equal(tc.want))
 	}
 }

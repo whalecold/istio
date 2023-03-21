@@ -76,12 +76,11 @@ func NewMultiADSC(cfg *Config) (*MultiADSC, error) {
 	return md, nil
 }
 
-// RunQueryServer http query server
-func (ma *MultiADSC) RunQueryServer() {
+// Run...
+func (ma *MultiADSC) Run() {
 	port := QueryServerPort.Get()
-	adscLog.Infof("listen mcp query server on port: %d", port)
-	s := httpserver.NewQueryServer(ma.store, port)
-	s.Run()
+	adscLog.Infof("mcp http server starting,  port : %d", port)
+	httpserver.New(ma.store, port).Run()
 }
 
 // GetStore return store.
