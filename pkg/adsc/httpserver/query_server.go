@@ -20,6 +20,11 @@ import (
 	"istio.io/istio/pkg/config/schema/gvk"
 )
 
+const (
+	serviceEntryKind  = "serviceentry"
+	workloadEntryKind = "workloadentry"
+)
+
 type server struct {
 	port  int
 	store model.ConfigStore
@@ -35,8 +40,8 @@ func NewQueryServer(store model.ConfigStore, port int) *server {
 		port:  port,
 	}
 	s.storeKindMap = map[string]config.GroupVersionKind{
-		"serviceentry":  gvk.ServiceEntry,
-		"workloadentry": gvk.WorkloadEntry,
+		serviceEntryKind:  gvk.ServiceEntry,
+		workloadEntryKind: gvk.WorkloadEntry,
 	}
 	s.convertMap = map[config.GroupVersionKind]func(config.GroupVersionKind, *config.Config) interface{}{
 		gvk.ServiceEntry:  s.convertToK8sServiceEntry,
@@ -57,7 +62,7 @@ func (s *server) Run() {
 }
 
 // errorResponseHandler handle the error response.
-func (s *server) errorResponseHandler(c http.ResponseWriter, err error, code int) {
+func errorResponseHandler(c http.ResponseWriter, err error, code int) {
 	resp := &Response{
 		Error: &Error{
 			Code:    code,
@@ -73,7 +78,7 @@ func (s *server) errorResponseHandler(c http.ResponseWriter, err error, code int
 func (s *server) httpGetResourceHandler(c http.ResponseWriter, gvkInfo config.GroupVersionKind, res *config.Config) {
 	handler, ok := s.convertMap[gvkInfo]
 	if !ok {
-		s.errorResponseHandler(c, fmt.Errorf("the kind %v is not support", gvkInfo), http.StatusBadRequest)
+		errorResponseHandler(c, fmt.Errorf("the kind %v is not support", gvkInfo), http.StatusBadRequest)
 		return
 	}
 	response := handler(gvkInfo, res)
@@ -89,7 +94,7 @@ func (s *server) httpResourceHandler(c http.ResponseWriter, gvkInfo config.Group
 	}
 	handler, ok := s.convertMap[gvkInfo]
 	if !ok {
-		s.errorResponseHandler(c, fmt.Errorf("the kind %v is not support", gvkInfo), http.StatusBadRequest)
+		errorResponseHandler(c, fmt.Errorf("the kind %v is not support", gvkInfo), http.StatusBadRequest)
 		return
 	}
 
@@ -151,7 +156,7 @@ func convertToK8sMate(meta config.Meta) metav1.ObjectMeta {
 	}
 }
 
-func (s *server) parseGetOption(request *http.Request) (*GetOption, error) {
+func parseGetOption(request *http.Request) (*GetOption, error) {
 	opts := &GetOption{
 		Kind:      request.URL.Query().Get(queryParameterKind),
 		Name:      request.URL.Query().Get(queryParameterName),
@@ -163,7 +168,7 @@ func (s *server) parseGetOption(request *http.Request) (*GetOption, error) {
 	return opts, nil
 }
 
-func (s *server) parseListOptions(request *http.Request) (*ListOptions, error) {
+func parseListOptions(request *http.Request) (*ListOptions, error) {
 	opts := &ListOptions{
 		Kind:       request.URL.Query().Get(queryParameterKind),
 		Keyword:    request.URL.Query().Get(queryParameterKeyword),
@@ -177,7 +182,7 @@ func (s *server) parseListOptions(request *http.Request) (*ListOptions, error) {
 
 	if opts.Kind == "" {
 		// default to serviceentry
-		opts.Kind = "serviceentry"
+		opts.Kind = serviceEntryKind
 	}
 	var err error
 	start, limit := request.URL.Query().Get(queryParameterStart), request.URL.Query().Get(queryParameterLimit)
@@ -200,37 +205,39 @@ func (s *server) parseListOptions(request *http.Request) (*ListOptions, error) {
 	if opts.Limit == 0 {
 		opts.Limit = 10
 	}
-	defer request.Body.Close()
 
 	b, err := io.ReadAll(request.Body)
 	if err != nil {
 		return nil, errors.Wrapf(err, "io read all failed")
 	}
+	defer request.Body.Close()
+
 	if len(b) != 0 {
 		opts.Selector, err = labels.Parse(string(b))
 		if err != nil {
 			return nil, errors.Wrapf(err, "error format of labels %s", string(b))
 		}
+		fmt.Printf("----------selector %s, %s \n", opts.Selector.String(), string(b))
 	}
 	return opts, nil
 }
 
 func (s *server) GetResourceHandler() http.Handler {
 	return http.HandlerFunc(func(c http.ResponseWriter, request *http.Request) {
-		opts, err := s.parseGetOption(request)
+		opts, err := parseGetOption(request)
 		if err != nil {
-			s.errorResponseHandler(c, err, http.StatusBadRequest)
+			errorResponseHandler(c, err, http.StatusBadRequest)
 			return
 		}
 		gvkInfo, ok := s.storeKindMap[opts.Kind]
 		if !ok {
-			s.errorResponseHandler(c, fmt.Errorf("the kind %s is not support", opts.Kind), http.StatusBadRequest)
+			errorResponseHandler(c, fmt.Errorf("the kind %s is not support", opts.Kind), http.StatusBadRequest)
 			return
 		}
 
 		obj := s.store.Get(gvkInfo, opts.Name, opts.Namespace)
 		if obj == nil {
-			s.errorResponseHandler(c, fmt.Errorf("%s/%s/%s not found", opts.Kind, opts.Name, opts.Namespace), http.StatusNotFound)
+			errorResponseHandler(c, fmt.Errorf("%s/%s/%s not found", opts.Kind, opts.Name, opts.Namespace), http.StatusNotFound)
 			return
 		}
 		s.httpGetResourceHandler(c, gvkInfo, obj)
@@ -239,20 +246,20 @@ func (s *server) GetResourceHandler() http.Handler {
 
 func (s *server) ListResourceHandler() http.Handler {
 	return http.HandlerFunc(func(c http.ResponseWriter, request *http.Request) {
-		options, err := s.parseListOptions(request)
+		options, err := parseListOptions(request)
 		if err != nil {
-			s.errorResponseHandler(c, err, http.StatusBadRequest)
+			errorResponseHandler(c, err, http.StatusBadRequest)
 			return
 		}
 		gvkInfo, ok := s.storeKindMap[options.Kind]
 		if !ok {
-			s.errorResponseHandler(c, fmt.Errorf("the kind %s is not support", options.Kind), http.StatusBadRequest)
+			errorResponseHandler(c, fmt.Errorf("the kind %s is not support", options.Kind), http.StatusBadRequest)
 			return
 		}
 
 		list, err := s.store.List(gvkInfo, options.Namespace())
 		if err != nil {
-			s.errorResponseHandler(c, err, http.StatusInternalServerError)
+			errorResponseHandler(c, err, http.StatusInternalServerError)
 			return
 		}
 
@@ -284,13 +291,14 @@ func filterByOptions(configs []config.Config, opts *ListOptions) []config.Config
 	}
 	var idx int
 	for i := range configs {
-		if !opts.InNamespaces(configs[i].Namespace) {
+		cfg := &configs[i]
+		if !opts.InNamespaces(cfg.Namespace) {
 			continue
 		}
-		if opts.Keyword != "" && !strings.Contains(configs[i].Name, opts.Keyword) {
+		if opts.Keyword != "" && !strings.Contains(cfg.Name, opts.Keyword) {
 			continue
 		}
-		if opts.Selector != nil && !opts.Selector.Matches(labels.Set(configs[i].Labels)) {
+		if opts.Selector != nil && !opts.Selector.Matches(labels.Set(cfg.Labels)) {
 			continue
 		}
 		configs[idx] = configs[i]

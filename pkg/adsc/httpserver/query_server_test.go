@@ -46,13 +46,12 @@ func TestParseListOptions(t *testing.T) {
 			},
 		},
 	}
-	s := &server{}
 	for _, tc := range testCases {
 		req, err := http.NewRequest("GET", tc.url, strings.NewReader(tc.body))
 		if err != nil {
 			log.Fatalln(err)
 		}
-		opts, err := s.parseListOptions(req)
+		opts, err := parseListOptions(req)
 		g.Expect(err).To(gomega.BeNil())
 		g.Expect(opts).To(gomega.Equal(tc.want))
 	}
@@ -61,6 +60,7 @@ func TestParseListOptions(t *testing.T) {
 func TestFilterByOptions(t *testing.T) {
 	g := gomega.NewWithT(t)
 	selectin, _ := labels.Parse("app in (c1, c2)")
+	selectEqual, _ := labels.Parse("registrysynctask.mse.paas.volcengine.com/workspaceId=qbmsqu0j4cd1zr5uoe7s9uqr")
 	testCases := []struct {
 		input []config.Config
 		want  []config.Config
@@ -74,6 +74,7 @@ func TestFilterByOptions(t *testing.T) {
 						Labels: map[string]string{
 							"app":     "c",
 							"version": "v1",
+							"registrysynctask.mse.paas.volcengine.com/workspaceId": "qbmsqu0j4cd1zr5uoe7s9uqr",
 						},
 					},
 				},
@@ -94,14 +95,13 @@ func TestFilterByOptions(t *testing.T) {
 						Labels: map[string]string{
 							"app":     "c",
 							"version": "v1",
+							"registrysynctask.mse.paas.volcengine.com/workspaceId": "qbmsqu0j4cd1zr5uoe7s9uqr",
 						},
 					},
 				},
 			},
 			opts: &ListOptions{
-				Selector: labels.SelectorFromSet(labels.Set{
-					"version": "v1",
-				}),
+				Selector: selectEqual,
 			},
 		},
 		{
