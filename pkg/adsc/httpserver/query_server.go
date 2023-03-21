@@ -175,9 +175,12 @@ func parseListOptions(request *http.Request) (*ListOptions, error) {
 		Namespaces: map[string]bool{},
 	}
 
-	nss := strings.Split(request.URL.Query().Get(queryParameterNamespaces), ",")
-	for _, ns := range nss {
-		opts.Namespaces[ns] = true
+	nsStr := request.URL.Query().Get(queryParameterNamespaces)
+	if nsStr != "" {
+		nss := strings.Split(nsStr, ",")
+		for _, ns := range nss {
+			opts.Namespaces[ns] = true
+		}
 	}
 
 	if opts.Kind == "" {
@@ -217,7 +220,6 @@ func parseListOptions(request *http.Request) (*ListOptions, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "error format of labels %s", string(b))
 		}
-		fmt.Printf("----------selector %s, %s \n", opts.Selector.String(), string(b))
 	}
 	return opts, nil
 }

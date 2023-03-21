@@ -101,7 +101,8 @@ func TestFilterByOptions(t *testing.T) {
 				},
 			},
 			opts: &ListOptions{
-				Selector: selectEqual,
+				Selector:   selectEqual,
+				Namespaces: map[string]bool{},
 			},
 		},
 		{
