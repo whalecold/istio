@@ -23,8 +23,8 @@ type server struct {
 	port  int
 	store model.ConfigStoreCache
 	// stores the relationship with query type and gvk info.
-	kinds    map[string]config.GroupVersionKind
-	handlers map[config.GroupVersionKind]func(config.GroupVersionKind, *config.Config) interface{}
+	kinds      map[string]config.GroupVersionKind
+	convertFns map[config.GroupVersionKind]func(config.GroupVersionKind, *config.Config) interface{}
 }
 
 // New new query server.
@@ -37,7 +37,7 @@ func New(store model.ConfigStoreCache, p int) *server {
 		serviceEntryKind:  gvk.ServiceEntry,
 		workloadEntryKind: gvk.WorkloadEntry,
 	}
-	s.handlers = map[config.GroupVersionKind]func(config.GroupVersionKind, *config.Config) interface{}{
+	s.convertFns = map[config.GroupVersionKind]func(config.GroupVersionKind, *config.Config) interface{}{
 		gvk.ServiceEntry:  convertToK8sServiceEntry,
 		gvk.WorkloadEntry: convertToK8sWorkloadEntry,
 	}
@@ -67,12 +67,12 @@ func handleErrorResponse(w http.ResponseWriter, err error, code int) {
 }
 
 func (s *server) handleResponse(w http.ResponseWriter, gvk config.GroupVersionKind, conf *config.Config) {
-	handler, ok := s.handlers[gvk]
+	convert, ok := s.convertFns[gvk]
 	if !ok {
 		handleErrorResponse(w, fmt.Errorf("the kind %v is not support", gvk), http.StatusBadRequest)
 		return
 	}
-	r := handler(gvk, conf)
+	r := convert(gvk, conf)
 	out, _ := json.Marshal(r)
 	w.WriteHeader(http.StatusOK)
 	w.Write(out)
@@ -82,7 +82,7 @@ func (s *server) handleResponses(w http.ResponseWriter, gvk config.GroupVersionK
 	ret := &ResourceList{
 		Total: total,
 	}
-	handler, ok := s.handlers[gvk]
+	convert, ok := s.convertFns[gvk]
 	if !ok {
 		handleErrorResponse(w, fmt.Errorf("the kind %v is not support", gvk), http.StatusBadRequest)
 		return
@@ -91,7 +91,7 @@ func (s *server) handleResponses(w http.ResponseWriter, gvk config.GroupVersionK
 	items := make([]interface{}, 0, len(confs))
 	for idx := range confs {
 		r := &confs[idx]
-		items = append(items, handler(gvk, r))
+		items = append(items, convert(gvk, r))
 	}
 	ret.Items = items
 
