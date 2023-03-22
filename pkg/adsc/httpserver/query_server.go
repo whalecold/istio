@@ -4,14 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	networkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	clientv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"istio.io/istio/pilot/pkg/model"
+	adscmetrics "istio.io/istio/pkg/adsc/metrics"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/schema/gvk"
+	istiolog "istio.io/pkg/log"
+)
+
+var (
+	log = istiolog.RegisterScope("mcpserver", "mcp http server", 0)
 )
 
 const (
@@ -63,8 +71,8 @@ func handleErrorResponse(w http.ResponseWriter, err error, code int) {
 			Message: err.Error(),
 		},
 	}
-	w.WriteHeader(code)
 	out, _ := json.Marshal(resp)
+	w.WriteHeader(code)
 	w.Write(out)
 }
 
@@ -109,20 +117,34 @@ func (s *server) handleResponses(w http.ResponseWriter, gvk config.GroupVersionK
 
 func (s *server) GetResourceHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		statusCode := http.StatusOK
+		t1 := time.Now()
 		opt, err := parseGetOption(request)
+
+		defer func() {
+			if err != nil {
+				handleErrorResponse(w, err, statusCode)
+			}
+			code := strconv.Itoa(statusCode)
+			adscmetrics.MCPServerRequestsDuration.WithLabelValues(opt.Kind, "get", code).Observe(time.Since(t1).Seconds())
+			adscmetrics.MCPServerRequestsTotal.WithLabelValues(opt.Kind, "get", code).Inc()
+		}()
+
 		if err != nil {
-			handleErrorResponse(w, err, http.StatusBadRequest)
+			statusCode = http.StatusBadRequest
 			return
 		}
 		gvk, ok := s.kinds[opt.Kind]
 		if !ok {
-			handleErrorResponse(w, fmt.Errorf("the kind %s is not support", opt.Kind), http.StatusBadRequest)
+			err = fmt.Errorf("the kind %s is not support", opt.Kind)
+			statusCode = http.StatusBadRequest
 			return
 		}
 
 		obj := s.store.Get(gvk, opt.Name, opt.Namespace)
 		if obj == nil {
-			handleErrorResponse(w, fmt.Errorf("%s/%s/%s not found", opt.Kind, opt.Name, opt.Namespace), http.StatusNotFound)
+			err = fmt.Errorf("%s/%s/%s not found", opt.Kind, opt.Name, opt.Namespace)
+			statusCode = http.StatusNotFound
 			return
 		}
 		s.handleResponse(w, gvk, obj)
@@ -131,20 +153,38 @@ func (s *server) GetResourceHandler() http.Handler {
 
 func (s *server) ListResourceHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		opt, err := parseListOptions(request)
+		var (
+			err  error
+			opt  *ListOptions
+			cfgs []config.Config
+		)
+		statusCode := http.StatusOK
+		t1 := time.Now()
+
+		opt, err = parseListOptions(request)
+
+		defer func() {
+			if err != nil {
+				handleErrorResponse(w, err, statusCode)
+			}
+			code := strconv.Itoa(statusCode)
+			adscmetrics.MCPServerRequestsDuration.WithLabelValues(opt.Kind, "list", code).Observe(time.Since(t1).Seconds())
+			adscmetrics.MCPServerRequestsTotal.WithLabelValues(opt.Kind, "list", code).Inc()
+		}()
+
 		if err != nil {
-			handleErrorResponse(w, err, http.StatusBadRequest)
 			return
 		}
 		gvk, ok := s.kinds[opt.Kind]
 		if !ok {
-			handleErrorResponse(w, fmt.Errorf("the kind %s is not support", opt.Kind), http.StatusBadRequest)
+			err = fmt.Errorf("the kind %s is not support", opt.Kind)
+			statusCode = http.StatusBadRequest
 			return
 		}
 
-		cfgs, err := s.store.List(gvk, opt.Namespace())
+		cfgs, err = s.store.List(gvk, opt.Namespace())
 		if err != nil {
-			handleErrorResponse(w, err, http.StatusInternalServerError)
+			statusCode = http.StatusInternalServerError
 			return
 		}
 
