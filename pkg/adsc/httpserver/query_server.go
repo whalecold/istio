@@ -27,14 +27,14 @@ const (
 
 type server struct {
 	port  int
-	store model.ConfigStore
+	store model.ConfigStoreCache
 	// stores the relationship with query type and gvk info.
 	kinds    map[string]config.GroupVersionKind
 	handlers map[config.GroupVersionKind]func(config.GroupVersionKind, *config.Config) interface{}
 }
 
 // New new query server.
-func New(store model.ConfigStore, p int) *server {
+func New(store model.ConfigStoreCache, p int) *server {
 	s := &server{
 		store: store,
 		port:  p,
@@ -47,7 +47,17 @@ func New(store model.ConfigStore, p int) *server {
 		gvk.ServiceEntry:  convertToK8sServiceEntry,
 		gvk.WorkloadEntry: convertToK8sWorkloadEntry,
 	}
+	s.store.RegisterEventHandler(gvk.ServiceEntry, s.serviceEntryHandler)
+	s.store.RegisterEventHandler(gvk.WorkloadEntry, s.workloadEntryHandler)
 	return s
+}
+
+func (s *server) serviceEntryHandler(old, cur config.Config, event model.Event) {
+	fmt.Println("serviceEntryHandler ")
+}
+
+func (s *server) workloadEntryHandler(old, cur config.Config, event model.Event) {
+	fmt.Println("serviceEntryHandler ")
 }
 
 // Run ...
@@ -212,14 +222,9 @@ func parseSelector(request *http.Request) (labels.Selector, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "io read all failed")
 	}
-	defer request.Body.Close()
-
-	var selector labels.Selector
-	if len(b) != 0 {
-		selector, err = labels.Parse(string(b))
-		if err != nil {
-			return nil, errors.Wrapf(err, "error format of labels %s", string(b))
-		}
+	selector, err := labels.Parse(string(b))
+	if err != nil {
+		return nil, errors.Wrapf(err, "error format of labels %s", string(b))
 	}
 	return selector, nil
 }
@@ -272,6 +277,7 @@ func (s *server) ListResourceHandler() http.Handler {
 			handleErrorResponse(w, err, http.StatusBadRequest)
 			return
 		}
+		fmt.Println("list opts ", opt, "selector ", opt.Selector.String())
 		gvk, ok := s.kinds[opt.Kind]
 		if !ok {
 			handleErrorResponse(w, fmt.Errorf("the kind %s is not support", opt.Kind), http.StatusBadRequest)
