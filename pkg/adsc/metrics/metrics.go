@@ -27,14 +27,14 @@ var (
 			Name: "mcp_server_requests_total",
 			Help: "the total number of requests by the mcp server",
 		},
-		[]string{"kind", "method", "status"},
+		[]string{"kind", "path", "status"},
 	)
 	MCPServerRequestsDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "mcp_server_requests_duration",
 			Help: "the duration of requests by the mcp server",
 		},
-		[]string{"kind", "method", "status"},
+		[]string{"kind", "path", "status"},
 	)
 )
 
