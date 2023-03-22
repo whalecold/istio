@@ -96,6 +96,7 @@ func (s *server) handleResponse(w http.ResponseWriter, gvk config.GroupVersionKi
 }
 
 func (s *server) handleResponses(w http.ResponseWriter, gvk config.GroupVersionKind, total int, confs []config.Config) {
+	fmt.Println("list responses len ", len(confs))
 	ret := &ResourceList{
 		Total: total,
 	}
@@ -289,10 +290,13 @@ func (s *server) ListResourceHandler() http.Handler {
 			handleErrorResponse(w, err, http.StatusInternalServerError)
 			return
 		}
+		fmt.Println("the store list ret ", len(cfgs))
 
 		cfgs = filterByOptions(cfgs, opt)
+		fmt.Println("the store list ret after filter ", len(cfgs))
 		sortConfigByCreationTime(cfgs)
 		total, cfgs := paginateResource(opt, cfgs)
+		fmt.Println("the store list ret after paginateResource ", len(cfgs))
 		s.handleResponses(w, gvk, total, cfgs)
 	})
 }
