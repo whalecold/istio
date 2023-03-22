@@ -19,12 +19,14 @@ const (
 	workloadEntryKind = "workloadentry"
 )
 
+type convertFn func(config.GroupVersionKind, *config.Config) interface{}
+
 type server struct {
 	port  int
 	store model.ConfigStoreCache
 	// stores the relationship with query type and gvk info.
 	kinds      map[string]config.GroupVersionKind
-	convertFns map[config.GroupVersionKind]func(config.GroupVersionKind, *config.Config) interface{}
+	convertFns map[config.GroupVersionKind]convertFn
 }
 
 // New new query server.
@@ -37,7 +39,7 @@ func New(store model.ConfigStoreCache, p int) *server {
 		serviceEntryKind:  gvk.ServiceEntry,
 		workloadEntryKind: gvk.WorkloadEntry,
 	}
-	s.convertFns = map[config.GroupVersionKind]func(config.GroupVersionKind, *config.Config) interface{}{
+	s.convertFns = map[config.GroupVersionKind]convertFn{
 		gvk.ServiceEntry:  convertToK8sServiceEntry,
 		gvk.WorkloadEntry: convertToK8sWorkloadEntry,
 	}
