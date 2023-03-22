@@ -122,7 +122,7 @@ func parseGetOption(request *http.Request) (*GetOption, error) {
 		Namespace: request.URL.Query().Get(queryParameterNamespace),
 	}
 	if opts.Kind == "" || opts.Name == "" || opts.Namespace == "" {
-		return nil, fmt.Errorf("the parameter should not be empty")
+		return nil, fmt.Errorf("the parameter should not be empty %v", opts)
 	}
 	return opts, nil
 }

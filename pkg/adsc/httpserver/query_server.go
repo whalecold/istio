@@ -74,7 +74,9 @@ func (s *server) handleResponse(w http.ResponseWriter, gvk config.GroupVersionKi
 		handleErrorResponse(w, fmt.Errorf("the kind %v is not support", gvk), http.StatusBadRequest)
 		return
 	}
-	r := convert(gvk, conf)
+	r := &Response{
+		Result: convert(gvk, conf),
+	}
 	out, _ := json.Marshal(r)
 	w.WriteHeader(http.StatusOK)
 	w.Write(out)
