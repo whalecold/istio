@@ -1,4 +1,4 @@
-package httpserver
+package server
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	http2 "istio.io/istio/pkg/adsc/server/http"
 	"istio.io/istio/pkg/config"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -25,8 +26,8 @@ const (
 
 // Response ...
 type Response struct {
-	Error  *Error      `json:"error,omitempty"`
-	Result interface{} `json:"result,omitempty"`
+	Error  *http2.Error `json:"error,omitempty"`
+	Result interface{}  `json:"result,omitempty"`
 }
 
 // ResourceList ...

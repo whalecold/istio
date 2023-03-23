@@ -459,7 +459,7 @@ func (s *Server) Start(stop <-chan struct{}) error {
 	}
 
 	if s.multiMcpService != nil {
-		go s.multiMcpService.Server()
+		go s.multiMcpService.Serve()
 	}
 
 	if s.multiDiscoveryService != nil {

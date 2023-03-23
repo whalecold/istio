@@ -1,4 +1,4 @@
-package httpserver
+package server
 
 import (
 	networkingv1alpha3 "istio.io/api/networking/v1alpha3"

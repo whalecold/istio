@@ -11,8 +11,8 @@ import (
 
 	"istio.io/istio/pilot/pkg/model"
 	mcpaggregate "istio.io/istio/pkg/adsc/aggregate"
-	"istio.io/istio/pkg/adsc/httpserver"
 	"istio.io/istio/pkg/adsc/mcpdiscovery"
+	"istio.io/istio/pkg/adsc/server"
 	"istio.io/istio/pkg/adsc/xdsclient"
 	"istio.io/istio/pkg/config/schema/collections"
 )
@@ -76,10 +76,12 @@ func NewMultiADSC(cfg *Config) (*MultiADSC, error) {
 	return md, nil
 }
 
-// Server...
-func (ma *MultiADSC) Server() {
+// Serve...
+func (ma *MultiADSC) Serve() {
 	port := QueryServerPort.Get()
-	httpserver.New(ma.store, port).Server()
+	if err := server.New(ma.store, port).Serve(); err != nil {
+		panic(err)
+	}
 }
 
 // GetStore return store.
