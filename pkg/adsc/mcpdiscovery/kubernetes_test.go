@@ -25,7 +25,7 @@ func TestRegisterMcpServerAddress(t *testing.T) {
 	})
 	g.Expect(err).To(gomega.BeNil())
 
-	cm, err := cli.CoreV1().ConfigMaps(constants.IstioSystemNamespace).Get(ctx, configmapName, metav1.GetOptions{})
+	cm, err := cli.Kube().CoreV1().ConfigMaps(constants.IstioSystemNamespace).Get(ctx, configmapName, metav1.GetOptions{})
 	g.Expect(err).To(gomega.BeNil())
 	g.Expect(cm.Data).To(gomega.Equal(map[string]string{
 		"a1": "127.0.0.1:8080",
@@ -38,7 +38,7 @@ func TestRegisterMcpServerAddress(t *testing.T) {
 	})
 	g.Expect(err).To(gomega.BeNil())
 
-	cm, err = cli.CoreV1().ConfigMaps(constants.IstioSystemNamespace).Get(ctx, configmapName, metav1.GetOptions{})
+	cm, err = cli.Kube().CoreV1().ConfigMaps(constants.IstioSystemNamespace).Get(ctx, configmapName, metav1.GetOptions{})
 	g.Expect(err).To(gomega.BeNil())
 	g.Expect(cm.Data).To(gomega.Equal(map[string]string{
 		"a1": "127.0.0.1:8080",
@@ -49,7 +49,7 @@ func TestRegisterMcpServerAddress(t *testing.T) {
 	err = r.DeRegister(ctx, "a3")
 	g.Expect(err).To(gomega.BeNil())
 
-	cm, err = cli.CoreV1().ConfigMaps(constants.IstioSystemNamespace).Get(ctx, configmapName, metav1.GetOptions{})
+	cm, err = cli.Kube().CoreV1().ConfigMaps(constants.IstioSystemNamespace).Get(ctx, configmapName, metav1.GetOptions{})
 	g.Expect(err).To(gomega.BeNil())
 	g.Expect(cm.Data).To(gomega.Equal(map[string]string{
 		"a1": "127.0.0.1:8080",
@@ -59,7 +59,7 @@ func TestRegisterMcpServerAddress(t *testing.T) {
 	err = r.DeRegister(ctx, "a1")
 	g.Expect(err).To(gomega.BeNil())
 
-	cm, err = cli.CoreV1().ConfigMaps(constants.IstioSystemNamespace).Get(ctx, configmapName, metav1.GetOptions{})
+	cm, err = cli.Kube().CoreV1().ConfigMaps(constants.IstioSystemNamespace).Get(ctx, configmapName, metav1.GetOptions{})
 	g.Expect(err).To(gomega.BeNil())
 	g.Expect(cm.Data).To(gomega.Equal(map[string]string{
 		"a2": "127.0.0.1:8181",

@@ -14,8 +14,8 @@ import (
 // ConfigStoreCache the wrapper of model.ConfigStoreCache, add the external AddStore and RemoveStore function to
 // implement the dynamic store aggregate.
 type ConfigStoreCache interface {
-	model.ConfigStoreCache
-	AddStore(string, model.ConfigStoreCache)
+	model.ConfigStoreController
+	AddStore(string, model.ConfigStoreController)
 	RemoveStore(string)
 }
 
@@ -37,7 +37,7 @@ type store struct {
 	// stores is a mapping from config type to stores
 	stores map[config.GroupVersionKind]map[string]model.ConfigStore
 	// stores is a mapping from instance to a storeCache
-	caches map[string]model.ConfigStoreCache
+	caches map[string]model.ConfigStoreController
 	// the cache for RegisterEventHandler, should add it to the new store which is added after the
 	// invoking of function RegisterEventHandler.
 	handlers []*eventHandler
@@ -52,7 +52,7 @@ type store struct {
 func MakeCache(defaultScheme collection.Schemas) ConfigStoreCache {
 	s := &store{
 		stores: map[config.GroupVersionKind]map[string]model.ConfigStore{},
-		caches: map[string]model.ConfigStoreCache{},
+		caches: map[string]model.ConfigStoreController{},
 	}
 	s.defaultScheme = defaultScheme
 	s.rebuildScheme()
@@ -61,7 +61,7 @@ func MakeCache(defaultScheme collection.Schemas) ConfigStoreCache {
 
 // AddStore add store dynamically. Overwrite the old store which has the same name, should clean the
 // store with same name before.
-func (cr *store) AddStore(storeName string, csc model.ConfigStoreCache) {
+func (cr *store) AddStore(storeName string, csc model.ConfigStoreController) {
 	cr.lock.Lock()
 	defer cr.lock.Unlock()
 
@@ -114,13 +114,31 @@ func (cr *store) RemoveStore(storeName string) {
 	}
 
 	delete(cr.caches, storeName)
-	for _, s := range cache.Schemas().All() {
-		stores, ok := cr.stores[s.Resource().GroupVersionKind()]
+	schemas := cache.Schemas().All()
+	gvks := make([]config.GroupVersionKind, len(schemas))
+	for i, s := range schemas {
+		gvk := s.Resource().GroupVersionKind()
+		stores, ok := cr.stores[gvk]
 		if ok {
 			delete(stores, storeName)
 		}
+		gvks[i] = gvk
 	}
 	cr.rebuildScheme()
+	cleanCache(cache, gvks)
+}
+
+// should do a clean up of the stores that the handler has registered in the cache.
+func cleanCache(cache model.ConfigStore, gvks []config.GroupVersionKind) {
+	for _, gvk := range gvks {
+		confs, err := cache.List(gvk, "")
+		if err != nil {
+			continue
+		}
+		for _, conf := range confs {
+			_ = cache.Delete(gvk, conf.Name, conf.Namespace, &conf.ResourceVersion)
+		}
+	}
 }
 
 // Schemas ...
@@ -243,4 +261,8 @@ func (cr *store) SetWatchErrorHandler(handler func(r *cache.Reflector, err error
 // Run all store invoke the Run function individually, do nothing.
 func (cr *store) Run(stop <-chan struct{}) {
 	<-stop
+}
+
+func (cr *store) HasStarted() bool {
+	return cr.HasSynced()
 }

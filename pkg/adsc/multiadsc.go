@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/cenkalti/backoff/v4"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	"istio.io/pkg/env"
 	utilserrors "k8s.io/apimachinery/pkg/util/errors"
@@ -14,6 +13,7 @@ import (
 	"istio.io/istio/pkg/adsc/mcpdiscovery"
 	"istio.io/istio/pkg/adsc/server"
 	"istio.io/istio/pkg/adsc/xdsclient"
+	"istio.io/istio/pkg/backoff"
 	"istio.io/istio/pkg/config/schema/collections"
 )
 
@@ -64,7 +64,7 @@ func nodeID() string {
 // - on success, start a background thread to maintain the xDSClient, with exp. backoff.
 func NewMultiADSC(cfg *Config) (*MultiADSC, error) {
 	if cfg.BackoffPolicy == nil {
-		cfg.BackoffPolicy = backoff.NewExponentialBackOff()
+		cfg.BackoffPolicy = backoff.NewExponentialBackOff(backoff.DefaultOption())
 	}
 	md := &MultiADSC{
 		cfg:            cfg,
@@ -85,7 +85,7 @@ func (ma *MultiADSC) Serve() {
 }
 
 // GetStore return store.
-func (ma *MultiADSC) GetStore() model.ConfigStoreCache {
+func (ma *MultiADSC) GetStore() model.ConfigStoreController {
 	return ma.store
 }
 

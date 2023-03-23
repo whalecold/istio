@@ -9,7 +9,6 @@ import (
 
 	v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	mcp "istio.io/api/mcp/v1alpha1"
@@ -104,18 +103,9 @@ func (s *stream) mcpToPilot(m *mcp.Resource) (*config.Config, error) {
 	c.Namespace = nsn[0]
 	c.Name = nsn[1]
 	var err error
-	if m.Metadata.CreateTime != nil {
-		c.CreationTimestamp, err = types.TimestampFromProto(m.Metadata.CreateTime)
-		if err != nil {
-			return nil, err
-		}
-	}
+	c.CreationTimestamp = m.Metadata.CreateTime.AsTime()
 
-	pb, err := types.EmptyAny(m.Body)
-	if err != nil {
-		return nil, err
-	}
-	err = types.UnmarshalAny(m.Body, pb)
+	pb, err := m.Body.UnmarshalNew()
 	if err != nil {
 		return nil, err
 	}
@@ -125,10 +115,7 @@ func (s *stream) mcpToPilot(m *mcp.Resource) (*config.Config, error) {
 
 func (s *stream) updateResource(gvk config.GroupVersionKind, rsc *discovery.Resource, fn func(*config.Config)) error {
 	m := &mcp.Resource{}
-	err := types.UnmarshalAny(&types.Any{
-		TypeUrl: rsc.Resource.TypeUrl,
-		Value:   rsc.Resource.Value,
-	}, m)
+	err := rsc.Resource.UnmarshalTo(m)
 	if err != nil {
 		adscLog.Warnf("Error unmarshalling received MCP config %v", err)
 		return err

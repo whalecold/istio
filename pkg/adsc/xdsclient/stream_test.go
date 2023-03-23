@@ -6,13 +6,13 @@ import (
 	"testing"
 
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
-	"github.com/golang/protobuf/ptypes/any"
+	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes"
 	"github.com/onsi/gomega"
 	"google.golang.org/grpc/metadata"
 	mcp "istio.io/api/mcp/v1alpha1"
 	networking "istio.io/api/networking/v1alpha3"
+
 	"istio.io/istio/pilot/pkg/config/memory"
 	"istio.io/istio/pkg/config/schema/collections"
 	"istio.io/istio/pkg/config/schema/gvk"
@@ -48,7 +48,7 @@ func (s *fakeStream) RecvMsg(m interface{}) error {
 }
 
 func marshalToResource(pb proto.Message, name, host string) (*discovery.Resource, error) {
-	seAny, err := types.MarshalAny(pb)
+	seAny, err := ptypes.MarshalAny(pb)
 	if err != nil {
 		return nil, err
 	}
@@ -61,18 +61,14 @@ func marshalToResource(pb proto.Message, name, host string) (*discovery.Resource
 		},
 		Body: seAny,
 	}
-
-	resAny, err := types.MarshalAny(mcpRes)
+	resAny, err := ptypes.MarshalAny(mcpRes)
 	if err != nil {
 		return nil, err
 	}
-	any2 := &any.Any{
-		TypeUrl: resAny.TypeUrl,
-		Value:   resAny.Value,
-	}
 	return &discovery.Resource{
-		Resource: any2,
+		Resource: resAny,
 	}, nil
+
 }
 
 const (

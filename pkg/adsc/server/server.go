@@ -23,14 +23,14 @@ type convertFn func(config.GroupVersionKind, *config.Config) interface{}
 
 type server struct {
 	port  int
-	store model.ConfigStoreCache
+	store model.ConfigStoreController
 	// stores the relationship with query type and gvk info.
 	kinds      map[string]config.GroupVersionKind
 	convertFns map[config.GroupVersionKind]convertFn
 }
 
 // New query server.
-func New(store model.ConfigStoreCache, p int) *server {
+func New(store model.ConfigStoreController, p int) *server {
 	s := &server{
 		store: store,
 		port:  p,

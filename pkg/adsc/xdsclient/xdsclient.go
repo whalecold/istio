@@ -39,7 +39,7 @@ type XDSClient interface {
 	GetID() string
 	Run() error
 	Close()
-	GetStore() model.ConfigStoreCache
+	GetStore() model.ConfigStoreController
 }
 
 // xDSClient the implementation of XDSClient.
@@ -51,7 +51,7 @@ type xDSClient struct {
 	nodeID       string
 
 	// Retrieved configurations can be stored using the common istio model interface.
-	store model.ConfigStoreCache
+	store model.ConfigStoreController
 
 	// backoffPolicy determines to reconnect policy. Based on MCP client.
 	backoffPolicy backoff.BackOff
@@ -112,7 +112,7 @@ func (c *xDSClient) Close() {
 }
 
 // GetStore get store.
-func (c *xDSClient) GetStore() model.ConfigStoreCache {
+func (c *xDSClient) GetStore() model.ConfigStoreController {
 	return c.store
 }
 

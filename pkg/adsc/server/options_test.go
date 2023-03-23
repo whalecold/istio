@@ -36,13 +36,19 @@ func TestParseListOptions(t *testing.T) {
 			},
 		},
 		{
-			url: "http://127.0.0.1:18001/mcp.istio.io/v1alpha1/resource?namespaces=ns,ns1&query=hello&q=q2&kind=workloadentry&keyword=hello",
+			url:  "http://127.0.0.1:18001/mcp.istio.io/v1alpha1/resource?namespaces=ns,ns1&query=hello&q=q2&kind=workloadentry&keyword=hello",
+			body: `a=apple,b=banana,location=hangzhou`,
 			want: &ListOptions{
 				Kind:       "workloadentry",
 				Keyword:    "hello",
 				Namespaces: map[string]bool{"ns": true, "ns1": true},
 				Start:      0,
 				Limit:      10,
+				Selector: labels.SelectorFromSet(labels.Set{
+					"a":        "apple",
+					"b":        "banana",
+					"location": "hangzhou",
+				}),
 			},
 		},
 	}

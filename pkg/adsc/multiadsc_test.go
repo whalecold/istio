@@ -31,7 +31,7 @@ func (c *fakeClient) Run() error {
 }
 func (c *fakeClient) Close() {}
 
-func (c *fakeClient) GetStore() model.ConfigStoreCache {
+func (c *fakeClient) GetStore() model.ConfigStoreController {
 	store := memory.MakeSkipValidation(collections.PilotMCP)
 	configController := memory.NewController(store)
 	//configController.RegisterHasSyncedHandler(c.HasSynced)

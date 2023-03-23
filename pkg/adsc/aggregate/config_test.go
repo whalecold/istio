@@ -17,8 +17,8 @@ import (
 func TestAggregateStoreScheme(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	schema1 := collections.K8SGatewayApiV1Alpha2Httproutes
-	schema2 := collections.K8SGatewayApiV1Alpha2Gatewayclasses
+	schema1 := collections.K8SGatewayApiV1Beta1Gatewayclasses
+	schema2 := collections.IstioMeshV1Alpha1MeshConfig
 	store1 := memory.Make(collection.SchemasFor(schema1))
 	store2 := memory.Make(collection.SchemasFor(schema2))
 	controller1 := memory.NewController(store1)
@@ -42,7 +42,7 @@ func TestAggregateStoreScheme(t *testing.T) {
 func TestAggregateStoreGetAndRemove(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	store1 := memory.Make(collection.SchemasFor(collections.K8SGatewayApiV1Alpha2Gatewayclasses))
+	store1 := memory.Make(collection.SchemasFor(collections.K8SGatewayApiV1Beta1Gatewayclasses))
 
 	controller1 := memory.NewController(store1)
 
@@ -73,8 +73,8 @@ func TestAggregateStoreGetAndRemove(t *testing.T) {
 func TestOverWriteAggregateStoreGet(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	store1 := memory.Make(collection.SchemasFor(collections.K8SGatewayApiV1Alpha2Gatewayclasses))
-	store2 := memory.Make(collection.SchemasFor(collections.K8SGatewayApiV1Alpha2Gatewayclasses))
+	store1 := memory.Make(collection.SchemasFor(collections.K8SGatewayApiV1Beta1Gatewayclasses))
+	store2 := memory.Make(collection.SchemasFor(collections.K8SGatewayApiV1Beta1Gatewayclasses))
 	controller1 := memory.NewController(store1)
 	controller2 := memory.NewController(store2)
 
@@ -112,8 +112,8 @@ func TestOverWriteAggregateStoreGet(t *testing.T) {
 func TestAggregateStoreList(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	store1 := memory.Make(collection.SchemasFor(collections.K8SGatewayApiV1Alpha2Gatewayclasses))
-	store2 := memory.Make(collection.SchemasFor(collections.K8SGatewayApiV1Alpha2Gatewayclasses))
+	store1 := memory.Make(collection.SchemasFor(collections.K8SGatewayApiV1Beta1Gatewayclasses))
+	store2 := memory.Make(collection.SchemasFor(collections.K8SGatewayApiV1Beta1Gatewayclasses))
 	controller1 := memory.NewController(store1)
 	controller2 := memory.NewController(store2)
 
@@ -152,7 +152,7 @@ func TestAggregateStoreRegisterEventHandler(t *testing.T) {
 	var changed bool
 	stop := make(chan struct{})
 
-	store1 := memory.Make(collection.SchemasFor(collections.K8SGatewayApiV1Alpha2Gatewayclasses))
+	store1 := memory.Make(collection.SchemasFor(collections.K8SGatewayApiV1Beta1Gatewayclasses))
 	controller1 := memory.NewSyncController(store1)
 
 	go controller1.Run(stop)
