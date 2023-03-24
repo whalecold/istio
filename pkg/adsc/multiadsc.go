@@ -50,6 +50,8 @@ type MultiADSC struct {
 	buildXDSClient func(string, string, string, []*discovery.DeltaDiscoveryRequest) (xdsclient.XDSClient, error)
 	// nodeID the identity of the node.
 	nodeID string
+
+	svr server.Server
 }
 
 func nodeID() string {
@@ -66,20 +68,21 @@ func NewMultiADSC(cfg *Config) (*MultiADSC, error) {
 	if cfg.BackoffPolicy == nil {
 		cfg.BackoffPolicy = backoff.NewExponentialBackOff(backoff.DefaultOption())
 	}
+	store := mcpaggregate.MakeCache(collections.PilotMCP)
 	md := &MultiADSC{
 		cfg:            cfg,
 		adscs:          make(map[string]xdsclient.XDSClient),
 		nodeID:         nodeID(),
-		store:          mcpaggregate.MakeCache(collections.PilotMCP),
+		store:          store,
 		buildXDSClient: xdsclient.New,
+		svr:            server.New(store, QueryServerPort.Get()),
 	}
 	return md, nil
 }
 
-// Serve...
+// Serve ...
 func (ma *MultiADSC) Serve() {
-	port := QueryServerPort.Get()
-	if err := server.New(ma.store, port).Serve(); err != nil {
+	if err := ma.svr.Serve(); err != nil {
 		panic(err)
 	}
 }

@@ -23,8 +23,6 @@ import (
 var adscLog = log.RegisterScope("adsc", "adsc debugging", 0)
 
 const (
-	// MCPServerSource the mcp server source.
-	MCPServerSource = "istio.io/mcp-server-source"
 	// BufferSize specifies the buffer size of event channel
 	BufferSize = 100
 
@@ -156,10 +154,10 @@ func (c *xDSClient) Run() error {
 			adscLog.Warnf("handle connection faield %v", err)
 		}
 	}
-	return nil
 }
 
 // use to trigger the store callback handle of deleting event
+// TODO it will cause performance problems if remove stores with a large cache frequently.
 func (c *xDSClient) cleanStore() {
 	gvks := []*config.GroupVersionKind{&gvk.ServiceEntry, &gvk.WorkloadEntry}
 	for _, val := range gvks {

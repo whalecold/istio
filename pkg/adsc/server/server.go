@@ -8,7 +8,13 @@ import (
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/schema/gvk"
 	istiolog "istio.io/pkg/log"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// Server ...
+type Server interface {
+	Serve() error
+}
 
 var (
 	mcplog = istiolog.RegisterScope("mcpserver", "mcp http server", 0)
@@ -19,21 +25,23 @@ const (
 	workloadEntryKind = "workloadentry"
 )
 
-type convertFn func(config.GroupVersionKind, *config.Config) interface{}
+type convertFn func(config.GroupVersionKind, *config.Config) metav1.Object
 
 type server struct {
 	port  int
 	store model.ConfigStoreController
 	// stores the relationship with query type and gvk info.
-	kinds      map[string]config.GroupVersionKind
-	convertFns map[config.GroupVersionKind]convertFn
+	kinds        map[string]config.GroupVersionKind
+	convertFns   map[config.GroupVersionKind]convertFn
+	indexedStore *serviceInstancesStore
 }
 
 // New query server.
-func New(store model.ConfigStoreController, p int) *server {
+func New(store model.ConfigStoreController, p int) Server {
 	s := &server{
-		store: store,
-		port:  p,
+		store:        store,
+		port:         p,
+		indexedStore: newStore(),
 	}
 	s.kinds = map[string]config.GroupVersionKind{
 		serviceEntryKind:  gvk.ServiceEntry,

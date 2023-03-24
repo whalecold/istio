@@ -17,6 +17,7 @@ import (
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pkg/adsc/metrics"
 	"istio.io/istio/pkg/config"
+	"istio.io/istio/pkg/config/constants"
 )
 
 type stream struct {
@@ -95,7 +96,8 @@ func (s *stream) mcpToPilot(m *mcp.Resource) (*config.Config, error) {
 	if c.Meta.Annotations == nil {
 		c.Meta.Annotations = make(map[string]string)
 	}
-	c.Meta.Annotations[MCPServerSource] = s.upstreamName + "~" + s.url
+	c.Meta.Annotations[constants.MCPServerSourceNode] = s.upstreamName + "~" + s.url
+	c.Meta.Annotations[constants.MCPServerSource] = s.upstreamName
 	nsn := strings.Split(m.Metadata.Name, "/")
 	if len(nsn) != 2 {
 		return nil, fmt.Errorf("invalid name %s", m.Metadata.Name)

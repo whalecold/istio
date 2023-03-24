@@ -125,20 +125,6 @@ func (cr *store) RemoveStore(storeName string) {
 		gvks[i] = gvk
 	}
 	cr.rebuildScheme()
-	cleanCache(cache, gvks)
-}
-
-// should do a clean up of the stores that the handler has registered in the cache.
-func cleanCache(cache model.ConfigStore, gvks []config.GroupVersionKind) {
-	for _, gvk := range gvks {
-		confs, err := cache.List(gvk, "")
-		if err != nil {
-			continue
-		}
-		for _, conf := range confs {
-			_ = cache.Delete(gvk, conf.Name, conf.Namespace, &conf.ResourceVersion)
-		}
-	}
 }
 
 // Schemas ...

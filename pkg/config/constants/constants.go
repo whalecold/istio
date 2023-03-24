@@ -32,7 +32,6 @@ const (
 
 	// CertChainFilename is mTLS chain file
 	CertChainFilename = "cert-chain.pem"
-
 	// DefaultServerCertChain is the default path to the mTLS chain file
 	DefaultCertChain = AuthCertsPath + CertChainFilename
 
@@ -150,4 +149,9 @@ const (
 	// CertProviderNone does not create any certificates for the control plane. It is assumed that some external
 	// load balancer, such as an Istio Gateway, is terminating the TLS.
 	CertProviderNone = "none"
+
+	// MCPServerSource ...
+	MCPServerSource = "istio.io/mcp-server-source"
+	// MCPServerSourceNode ...
+	MCPServerSourceNode = "istio.io/mcp-server-source-node"
 )

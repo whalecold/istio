@@ -10,7 +10,10 @@ import (
 
 	"github.com/pkg/errors"
 	http2 "istio.io/istio/pkg/adsc/server/http"
+	"istio.io/istio/pkg/config/schema/gvk"
+
 	"istio.io/istio/pkg/config"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -19,9 +22,12 @@ const (
 	queryParameterNamespace  = "namespace"
 	queryParameterNamespaces = "namespaces"
 	queryParameterKeyword    = "keyword"
+	queryParameterRef        = "ref"
 	queryParameterKind       = "kind"
 	queryParameterStart      = "start"
 	queryParameterLimit      = "limit"
+
+	annotationInstanceNumber = "sidecar.mesh.io/instance-number"
 )
 
 // Response ...
@@ -38,24 +44,44 @@ type ResourceList struct {
 
 // ListOptions ...
 type ListOptions struct {
-	Kind       string `query:"kind"`
-	Keyword    string `query:"keyword"`
+	Kind string `query:"kind"`
+	//
+	Query      string
 	Namespaces map[string]bool
 	Selector   labels.Selector
 	// If Start and Limit are all zero, return all the resource meet the others conditions.
 	Start int `query:"start" default:"0"`
 	Limit int `query:"limit" default:"10"`
+
+	// Query the resource that belongs to the ref.
+	refKey string
 }
 
-func (l *ListOptions) IsEmpty() bool {
-	return l.Selector == nil && l.Keyword == "" && len(l.Namespaces) == 0
+func (l *ListOptions) isRefList() bool {
+	return len(l.refKey) != 0
+}
+
+func (l *ListOptions) getRefKey() string {
+	return l.refKey
+}
+
+func (l *ListOptions) refGroupVersionKind() config.GroupVersionKind {
+	refs := strings.Split(l.refKey, "/")
+	if len(refs) != 5 {
+		return config.GroupVersionKind{}
+	}
+	return config.GroupVersionKind{
+		Group:   refs[0],
+		Version: refs[1],
+		Kind:    refs[2],
+	}
 }
 
 func (l *ListOptions) Contains(name string) bool {
-	if l.Keyword == "" {
+	if l.Query == "" {
 		return true
 	}
-	return strings.Contains(name, l.Keyword)
+	return strings.Contains(name, l.Query)
 }
 
 // Matchs ...
@@ -89,6 +115,12 @@ func (l *ListOptions) InNamespaces(ns string) bool {
 	return l.Namespaces[ns]
 }
 
+func (l *ListOptions) skip(cfg config.Config) bool {
+	return !l.InNamespaces(cfg.Namespace) ||
+		!l.Matchs(labels.Set(cfg.Labels)) ||
+		!l.Contains(cfg.Name)
+}
+
 // GetOption get option
 type GetOption struct {
 	Kind      string `query:"kind"`
@@ -97,58 +129,43 @@ type GetOption struct {
 }
 
 // sortConfigByCreationTime sorts the list of config objects in ascending order by their creation time (if available).
-func sortConfigByCreationTime(configs []config.Config) {
+func sortConfigByCreationTime(configs []metav1.Object) {
 	sort.Slice(configs, func(i, j int) bool {
 		// If creation time is the same, then behavior is nondeterministic. In this case, we can
 		// pick an arbitrary but consistent ordering based on name and namespace, which is unique.
 		// CreationTimestamp is stored in seconds, so this is not uncommon.
-		if configs[i].CreationTimestamp.Equal(configs[j].CreationTimestamp) {
-			in := configs[i].Namespace + "." + configs[i].Name
-			jn := configs[j].Namespace + "." + configs[j].Name
+		t1 := configs[i].GetCreationTimestamp()
+		t2 := configs[j].GetCreationTimestamp()
+
+		if t1.Equal(&t2) {
+			in := configs[i].GetNamespace() + "." + configs[i].GetName()
+			jn := configs[j].GetNamespace() + "." + configs[j].GetName()
 			return in < jn
 		}
-		return configs[i].CreationTimestamp.After(configs[j].CreationTimestamp)
+		return t1.After(t2.Time)
 	})
 }
 
-func filterByOptions(cfgs []config.Config, opts *ListOptions) []config.Config {
-	if opts.IsEmpty() {
-		return cfgs
-	}
-
-	var idx int
-	for i := range cfgs {
-		cfg := &cfgs[i]
-		if !opts.InNamespaces(cfg.Namespace) ||
-			!opts.Matchs(labels.Set(cfg.Labels)) ||
-			!opts.Contains(cfg.Name) {
-			continue
-		}
-		cfgs[idx] = cfgs[i]
-		idx += 1
-	}
-	return cfgs[:idx]
-}
-
-func paginateResource(opt *ListOptions, cfgs []config.Config) (total int, ret []config.Config) {
-	total = len(cfgs)
+func paginateResource(opt *ListOptions, confs []metav1.Object) (total int, ret []metav1.Object) {
+	total = len(confs)
 	start, limit := opt.Start, opt.Limit
-	if start >= len(cfgs) {
-		start = len(cfgs)
+	if start >= len(confs) {
+		start = len(confs)
 	}
 	end := start + limit
-	if end >= len(cfgs) {
-		end = len(cfgs)
+	if end >= len(confs) {
+		end = len(confs)
 	}
-	ret = cfgs[start:end]
+	ret = confs[start:end]
 	return
 }
 
 func parseListOptions(request *http.Request) (*ListOptions, error) {
 	opts := &ListOptions{
-		Keyword:    request.URL.Query().Get(queryParameterKeyword),
+		Query:      request.URL.Query().Get(queryParameterKeyword),
 		Kind:       stringDef(request.URL.Query().Get(queryParameterKind), serviceEntryKind),
 		Namespaces: parseNamespaces(request.URL.Query().Get(queryParameterNamespaces)),
+		refKey:     request.URL.Query().Get(queryParameterRef),
 	}
 
 	var err error
@@ -227,4 +244,22 @@ func parseNamespaces(namespaces string) map[string]bool {
 		ret[ns] = true
 	}
 	return ret
+}
+
+func annotatedConfigs(store *serviceInstancesStore, cfgs []metav1.Object, cgvk config.GroupVersionKind) {
+	if cgvk != gvk.ServiceEntry {
+		return
+	}
+	for i := range cfgs {
+		num, err := store.refIndexNumber(keyForMetaFunc(cfgs[i]))
+		if err != nil {
+			continue
+		}
+		anno := cfgs[i].GetAnnotations()
+		if anno == nil {
+			anno = map[string]string{}
+		}
+		anno[annotationInstanceNumber] = strconv.Itoa(num)
+		cfgs[i].SetAnnotations(anno)
+	}
 }

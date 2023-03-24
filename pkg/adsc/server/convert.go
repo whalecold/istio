@@ -7,7 +7,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func convertToK8sWorkloadEntry(gvk config.GroupVersionKind, res *config.Config) interface{} {
+func convertToK8sWorkloadEntry(gvk config.GroupVersionKind, res *config.Config) metav1.Object {
 	we, ok := res.Spec.(*networkingv1alpha3.WorkloadEntry)
 	if !ok {
 		return nil
@@ -19,7 +19,7 @@ func convertToK8sWorkloadEntry(gvk config.GroupVersionKind, res *config.Config) 
 	}
 }
 
-func convertToK8sServiceEntry(gvk config.GroupVersionKind, res *config.Config) interface{} {
+func convertToK8sServiceEntry(gvk config.GroupVersionKind, res *config.Config) metav1.Object {
 	se, ok := res.Spec.(*networkingv1alpha3.ServiceEntry)
 	if !ok {
 		return nil
