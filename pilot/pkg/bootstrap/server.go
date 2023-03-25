@@ -54,7 +54,6 @@ import (
 	"istio.io/istio/pilot/pkg/xds"
 	v3 "istio.io/istio/pilot/pkg/xds/v3"
 	"istio.io/istio/pkg/adsc"
-	"istio.io/istio/pkg/adsc/mcpdiscovery"
 	"istio.io/istio/pkg/cluster"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/constants"
@@ -126,8 +125,7 @@ type Server struct {
 	secureGrpcServer  *grpc.Server
 	secureGrpcAddress string
 
-	multiMcpService       *adsc.MultiADSC
-	multiDiscoveryService mcpdiscovery.DiscoveryRegistry
+	multiMcpService *adsc.MultiADSC
 
 	// monitoringMux listens on monitoringAddr(:15014).
 	// Currently runs prometheus monitoring and debug (if enabled).
@@ -463,10 +461,6 @@ func (s *Server) Start(stop <-chan struct{}) error {
 
 	if s.multiMcpService != nil {
 		go s.multiMcpService.Serve()
-	}
-
-	if s.multiDiscoveryService != nil {
-		go s.multiDiscoveryService.Run(stop)
 	}
 
 	if s.httpsServer != nil {

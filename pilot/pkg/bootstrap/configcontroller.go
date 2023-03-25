@@ -271,8 +271,11 @@ func (s *Server) initConfigSources(args *PilotArgs) (err error) {
 			discovery.RegisterHandler(multiMCP)
 
 			s.multiMcpService = multiMCP
-			//s.multiDiscoveryService = discovery
-			go discovery.Run(make(chan struct{}))
+
+			s.addStartFunc(func(stop <-chan struct{}) error {
+				go discovery.Run(stop)
+				return nil
+			})
 
 			s.ConfigStores = append(s.ConfigStores, multiMCP.GetStore())
 			log.Info("Started Multi XDS config ", s.ConfigStores)
