@@ -356,6 +356,44 @@ func sortIngressByCreationTime(configs []any) []*ingress.Ingress {
 	return ingr
 }
 
+func (c *controller) ListWithCache(typ config.GroupVersionKind, namespace string, cache model.ListCache) error {
+	if typ != gvk.Gateway &&
+		typ != gvk.VirtualService {
+		return errUnsupportedOp
+	}
+
+	list, err := c.filteredIngressInformer.List(namespace)
+	if err != nil {
+		return err
+	}
+
+	ingressByHost := map[string]*config.Config{}
+	for _, ingress := range sortIngressByCreationTime(list) {
+		process, err := c.shouldProcessIngress(c.meshWatcher.Mesh(), ingress)
+		if err != nil {
+			return err
+		}
+		if !process {
+			continue
+		}
+
+		switch typ {
+		case gvk.VirtualService:
+			ConvertIngressVirtualService(*ingress, c.domainSuffix, ingressByHost, c.serviceLister)
+		case gvk.Gateway:
+			gateways := ConvertIngressV1alpha3(*ingress, c.meshWatcher.Mesh(), c.domainSuffix)
+			cache.Append(gateways)
+		}
+	}
+
+	if typ == gvk.VirtualService {
+		for _, obj := range ingressByHost {
+			cache.Append(*obj)
+		}
+	}
+	return nil
+}
+
 func (c *controller) List(typ config.GroupVersionKind, namespace string) ([]config.Config, error) {
 	if typ != gvk.Gateway &&
 		typ != gvk.VirtualService {

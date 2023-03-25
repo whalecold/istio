@@ -145,6 +145,29 @@ func (cr *store) Get(typ config.GroupVersionKind, name, namespace string) *confi
 	return nil
 }
 
+func (cr *store) ListWithCache(typ config.GroupVersionKind, namespace string, cache model.ListCache) error {
+	var stores []model.ConfigStore
+	cr.lock.RLock()
+	for _, s := range cr.stores[typ] {
+		stores = append(stores, s)
+	}
+	cr.lock.RUnlock()
+
+	if len(stores) == 0 {
+		return nil
+	}
+
+	var errs *multierror.Error
+	for _, s := range stores {
+		err := s.ListWithCache(typ, namespace, cache)
+		if err != nil {
+			errs = multierror.Append(errs, err)
+			continue
+		}
+	}
+	return errs.ErrorOrNil()
+}
+
 // List all configs in the stores.
 func (cr *store) List(typ config.GroupVersionKind, namespace string) ([]config.Config, error) {
 	var stores []model.ConfigStore

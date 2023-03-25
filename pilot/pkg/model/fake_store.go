@@ -39,6 +39,9 @@ func (s *FakeStore) Schemas() collection.Schemas {
 
 func (*FakeStore) Get(typ config.GroupVersionKind, name, namespace string) *config.Config { return nil }
 
+func (s *FakeStore) ListWithCache(typ config.GroupVersionKind, namespace string, cache ListCache) error {
+	return nil
+}
 func (s *FakeStore) List(typ config.GroupVersionKind, namespace string) ([]config.Config, error) {
 	nsConfigs := s.store[typ]
 	if nsConfigs == nil {

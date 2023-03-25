@@ -17,6 +17,8 @@ package memory
 import (
 	"sync"
 
+	"time"
+
 	"go.uber.org/atomic"
 	"istio.io/istio/pilot/pkg/model"
 	config2 "istio.io/istio/pkg/config"
@@ -52,6 +54,8 @@ type configStoreMonitor struct {
 	// If enabled, events will be handled synchronously
 	sync bool
 
+	buffers []ConfigEvent
+
 	closed atomic.Bool
 	lock   sync.Locker
 }
@@ -84,42 +88,42 @@ func newBufferedMonitor(store model.ConfigStore, bufferSize int, syncMod bool) M
 }
 
 func (m *configStoreMonitor) ScheduleProcessEvent(configEvent ConfigEvent) {
-	m.lock.Lock()
 	if m.closed.Load() {
-		m.lock.Unlock()
 		return
 	}
 	if m.sync {
-		m.lock.Unlock()
 		m.processConfigEvent(configEvent)
 	} else {
-		m.eventCh <- configEvent
+		m.lock.Lock()
+		if m.buffers == nil {
+			m.buffers = make([]ConfigEvent, 0, BufferSize*10)
+		}
+		m.buffers = append(m.buffers, configEvent)
 		m.lock.Unlock()
 	}
-}
-
-// waitAndCleanup the close action should after the stop closed to make sure all the
-// events in the chan have been consumed.
-func (m *configStoreMonitor) waitAndCleanup(stop <-chan struct{}) {
-	<-stop
-
-	m.lock.Lock()
-	defer m.lock.Unlock()
-
-	m.closed.Store(true)
-	close(m.eventCh)
 }
 
 func (m *configStoreMonitor) Run(stop <-chan struct{}) {
 	if m.sync {
-		m.waitAndCleanup(stop)
+		<-stop
 		return
 	}
-	// Run should
-	go m.waitAndCleanup(stop)
 
-	for ce := range m.eventCh {
-		m.processConfigEvent(ce)
+	for {
+		var buffers []ConfigEvent
+		m.lock.Lock()
+		buffers = m.buffers
+		m.buffers = nil
+		m.lock.Unlock()
+		for i := range buffers {
+			m.processConfigEvent(buffers[i])
+		}
+		select {
+		case <-stop:
+			m.closed.Store(true)
+			break
+		case <-time.After(time.Millisecond * 100):
+		}
 	}
 }
 

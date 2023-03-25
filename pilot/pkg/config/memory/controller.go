@@ -166,6 +166,24 @@ func (c *Controller) Delete(kind config.GroupVersionKind, key, namespace string,
 	return errors.New("Delete failure: config" + key + "does not exist")
 }
 
+func (c *Controller) ListWithCache(kind config.GroupVersionKind, namespace string, cache model.ListCache) error {
+	err := c.configStore.ListWithCache(kind, namespace, cache)
+	if err != nil {
+		return err
+	}
+	if c.namespacesFilter != nil {
+		var out []config.Config
+		for _, config := range cache.Configs() {
+			if c.namespacesFilter(config) {
+				out = append(out, config)
+			}
+		}
+		cache.Reset(out)
+		return err
+	}
+	return nil
+}
+
 func (c *Controller) List(kind config.GroupVersionKind, namespace string) ([]config.Config, error) {
 	configs, err := c.configStore.List(kind, namespace)
 	if err != nil {

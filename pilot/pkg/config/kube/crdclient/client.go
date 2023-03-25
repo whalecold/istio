@@ -389,6 +389,26 @@ func (cl *Client) Delete(typ config.GroupVersionKind, name, namespace string, re
 	return delete(cl.istioClient, cl.gatewayAPIClient, typ, name, namespace, resourceVersion)
 }
 
+func (cl *Client) ListWithCache(kind config.GroupVersionKind, namespace string, cache model.ListCache) error {
+	h, f := cl.kind(kind)
+	if !f {
+		return nil
+	}
+
+	list, err := h.lister(namespace).List(klabels.Everything())
+	if err != nil {
+		return err
+	}
+
+	for _, item := range list {
+		cfg := TranslateObject(item, kind, cl.domainSuffix)
+		if cl.objectInRevision(&cfg) {
+			cache.Append(cfg)
+		}
+	}
+	return nil
+}
+
 // List implements store interface
 func (cl *Client) List(kind config.GroupVersionKind, namespace string) ([]config.Config, error) {
 	h, f := cl.kind(kind)

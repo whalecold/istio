@@ -122,6 +122,27 @@ func (c *Controller) Get(typ config.GroupVersionKind, name, namespace string) *c
 	return nil
 }
 
+func (c *Controller) ListWithCache(typ config.GroupVersionKind, namespace string, cache model.ListCache) error {
+	// TODO
+	if typ != gvk.Gateway && typ != gvk.VirtualService {
+		return errUnsupportedType
+	}
+	configs := cache.Configs()
+	c.stateMu.RLock()
+	defer c.stateMu.RUnlock()
+	switch typ {
+	case gvk.Gateway:
+		configs = append(configs, filterNamespace(c.state.Gateway, namespace)...)
+		cache.Reset(configs)
+	case gvk.VirtualService:
+		configs = append(configs, filterNamespace(c.state.VirtualService, namespace)...)
+		cache.Reset(configs)
+	default:
+		return errUnsupportedType
+	}
+	return nil
+}
+
 func (c *Controller) List(typ config.GroupVersionKind, namespace string) ([]config.Config, error) {
 	if typ != gvk.Gateway && typ != gvk.VirtualService {
 		return nil, errUnsupportedType

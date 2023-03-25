@@ -90,6 +90,32 @@ func (cr *store) Get(kind config.GroupVersionKind, name, namespace string) *conf
 	return &out
 }
 
+func (cr *store) ListWithCache(kind config.GroupVersionKind, namespace string, cache model.ListCache) error {
+	cr.mutex.RLock()
+	defer cr.mutex.RUnlock()
+	data, exists := cr.data[kind]
+	if !exists {
+		return nil
+	}
+
+	if namespace == "" {
+		for _, ns := range data {
+			for _, val := range ns {
+				cache.Append(val)
+			}
+		}
+	} else {
+		ns, exists := data[namespace]
+		if !exists {
+			return nil
+		}
+		for _, val := range ns {
+			cache.Append(val)
+		}
+	}
+	return nil
+}
+
 func (cr *store) List(kind config.GroupVersionKind, namespace string) ([]config.Config, error) {
 	cr.mutex.RLock()
 	defer cr.mutex.RUnlock()

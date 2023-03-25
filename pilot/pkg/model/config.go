@@ -146,6 +146,8 @@ type ConfigStore interface {
 	// Use "" for the namespace to list across namespaces.
 	List(typ config.GroupVersionKind, namespace string) ([]config.Config, error)
 
+	ListWithCache(typ config.GroupVersionKind, namespace string, cache ListCache) error
+
 	// Create adds a new configuration object to the store. If an object with the
 	// same name and namespace for the type already exists, the operation fails
 	// with no side effects.
@@ -339,4 +341,62 @@ func sortConfigByCreationTime(configs []config.Config) {
 // key creates a key from a reference's name and namespace.
 func key(name, namespace string) string {
 	return name + "/" + namespace
+}
+
+type Filter func(config.Config) bool
+
+func defaultIndexKey(cfg config.Config) string {
+	return cfg.GroupVersionKind.Kind + "/" + cfg.Namespace + "/" + cfg.Name
+}
+
+type ListCache interface {
+	Append(config config.Config)
+	AppendFilter(Filter) ListCache
+	Configs() []config.Config
+	Reset(configs []config.Config)
+}
+
+type listStore struct {
+	configs  []config.Config
+	indexers map[string]int
+	indexKey func(config.Config) string
+	filters  []func(config.Config) bool
+}
+
+func (l *listStore) Configs() []config.Config {
+	return l.configs
+}
+
+func (l *listStore) Reset(configs []config.Config) {
+	l.configs = configs
+	// TODO rebuild indexKey
+}
+
+func (l *listStore) Append(conf config.Config) {
+	for _, filter := range l.filters {
+		if filter(conf) {
+			return
+		}
+	}
+	key := l.indexKey(conf)
+	if _, ok := l.indexers[key]; !ok {
+		return
+	}
+	l.indexers[key] = len(l.configs)
+	l.configs = append(l.configs, conf)
+}
+
+func (l *listStore) AppendFilter(f Filter) ListCache {
+	l.filters = append(l.filters, f)
+	return l
+}
+
+const ListCacheSize = 10000
+
+func DefaultListCache() ListCache {
+	return &listStore{
+		indexKey: defaultIndexKey,
+		indexers: map[string]int{},
+		configs:  make([]config.Config, 0, ListCacheSize),
+	}
 }
