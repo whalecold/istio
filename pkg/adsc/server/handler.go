@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"istio.io/istio/pilot/pkg/model"
 	http2 "istio.io/istio/pkg/adsc/server/http"
 	"istio.io/istio/pkg/config"
@@ -53,11 +55,11 @@ func (s *server) handleGetRequest(request *http.Request) (interface{}, *http2.Er
 	return convert(gvk, obj), http2.OKHandler()
 }
 
-func (s *server) list(gvk config.GroupVersionKind, convert convertFn, opts *ListOptions) ([]config.Config, error) {
+func (s *server) list(gvk config.GroupVersionKind, opts *ListOptions) ([]*config.Config, error) {
 	if !opts.isRefList() {
 		cache := s.cb.Build()
 		defer cache.Close()
-		cache.AppendFilter(func(conf config.Config) bool {
+		cache.AppendFilter(func(conf *config.Config) bool {
 			return opts.skip(conf)
 		})
 		err := s.store.ListWithCache(gvk, model.NamespaceAll, cache)
@@ -67,23 +69,20 @@ func (s *server) list(gvk config.GroupVersionKind, convert convertFn, opts *List
 		return cache.Configs(), nil
 	}
 
-	//confs, err := s.indexedStore.byRefIndexer(opts.getRefKey())
-	//if err != nil {
-	//	return nil, err
-	//}
+	confs, err := s.indexedStore.byRefIndexer(opts.getRefKey())
+	if err != nil {
+		return nil, err
+	}
 
-	//ret := make([]metav1.Object, 0, len(confs))
-	//for i := range confs {
-	//	conf := confs[i].(config.Config)
-	//	if opts.skip(conf) {
-	//		continue
-	//	}
-	//	temp := convert(gvk, &conf)
-	//	if temp != nil {
-	//		ret = append(ret, temp)
-	//	}
-	//}
-	return nil, nil
+	ret := make([]*config.Config, 0, len(confs))
+	for i := range confs {
+		conf := confs[i].(config.Config)
+		if opts.skip(&conf) {
+			continue
+		}
+		ret = append(ret, &conf)
+	}
+	return ret, nil
 }
 
 func (s *server) handleListRequest(request *http.Request) (interface{}, *http2.Error) {
@@ -101,7 +100,7 @@ func (s *server) handleListRequest(request *http.Request) (interface{}, *http2.E
 		return nil, http2.BadRequestHander(fmt.Errorf("the kind %s is not support", opt.Kind))
 	}
 
-	confs, err := s.list(gvk, convert, opt)
+	confs, err := s.list(gvk, opt)
 	if err != nil {
 		return nil, http2.InternalServerHandler(err)
 	}
@@ -110,6 +109,11 @@ func (s *server) handleListRequest(request *http.Request) (interface{}, *http2.E
 	total, confs := paginateResource(opt, confs)
 
 	annotatedConfigs(s.indexedStore, confs, gvk)
+
+	ret := make([]metav1.Object, len(confs))
+	for idx, c := range confs {
+		ret[idx] = convert(gvk, c)
+	}
 
 	return &ResourceList{
 		Total: total,

@@ -264,7 +264,7 @@ func (s *Controller) workloadEntryHandler(old, curr config.Config, event model.E
 		}
 		return true
 	}
-	cache.SetFilter(filter)
+	cache.AppendFilter(filter)
 	_ = s.store.ListWithCache(gvk.ServiceEntry, curr.Namespace, cache)
 	//confs, _ := s.store.List(gvk.ServiceEntry, curr.Namespace)
 	log.Infof("list duration %s...", time.Since(t1))

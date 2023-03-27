@@ -345,16 +345,29 @@ func key(name, namespace string) string {
 }
 
 // Filter return true if ignore the config
-type Filter func(config.Config) bool
+type Filter func(*config.Config) bool
 
-func defaultIndexKey(cfg config.Config) string {
-	return cfg.GroupVersionKind.Kind + "/" + cfg.Namespace + "/" + cfg.Name
+func defaultIndexKey(cfg *config.Config) string {
+	var sb strings.Builder
+	sb.Grow(len(cfg.GroupVersionKind.CanonicalGroup()) +
+		len(cfg.GroupVersionKind.Version) + len(cfg.GroupVersionKind.Kind) +
+		len(cfg.Namespace) + len(cfg.Name) + 6)
+	sb.WriteString(cfg.GroupVersionKind.CanonicalGroup())
+	sb.WriteString("/")
+	sb.WriteString(cfg.GroupVersionKind.Version)
+	sb.WriteString("/")
+	sb.WriteString(cfg.GroupVersionKind.Kind)
+	sb.WriteString("/")
+	sb.WriteString(cfg.Namespace)
+	sb.WriteString("/")
+	sb.WriteString(cfg.Name)
+	return sb.String()
 }
 
 type ListCacheBuilder struct {
 	initSize int64
 	pool     *sync.Pool
-	indexer  func(cfg config.Config) string
+	indexer  func(cfg *config.Config) string
 	lock     sync.RWMutex
 }
 
@@ -365,7 +378,7 @@ func NewBuilder() *ListCacheBuilder {
 	}
 	b.pool = &sync.Pool{
 		New: func() interface{} {
-			return make([]config.Config, b.initSize)
+			return make([]*config.Config, b.initSize)
 		},
 	}
 	return b
@@ -377,57 +390,63 @@ func (lcb *ListCacheBuilder) Build() ListCache {
 	ls := &listStore{
 		size:     lcb.initSize,
 		indexKey: lcb.indexer,
-		indexers: map[string]int64{},
-		configs:  lcb.pool.Get().([]config.Config),
+		indexers: make(map[string]struct{}, 1024),
+		configs:  lcb.pool.Get().([]*config.Config),
 		build:    lcb,
 	}
 	return ls
 }
 
 type ListCache interface {
-	Append(config config.Config)
-	AppendFilter(Filter) ListCache
-	Configs() []config.Config
-	Reset(configs []config.Config)
+	Append(config *config.Config)
+	AppendFilter(Filter)
+	Configs() []*config.Config
+	ReFilter(f Filter)
 	Close()
 }
 
 type listStore struct {
-	configs  []config.Config
-	indexers map[string]int64
-	indexKey func(config.Config) string
-	filters  []func(config.Config) bool
+	configs  []*config.Config
+	indexers map[string]struct{}
+	indexKey func(*config.Config) string
+	filter   Filter
 	size     int64
 	index    int64
 	build    *ListCacheBuilder
 }
 
-func (l *listStore) Configs() []config.Config {
+func (l *listStore) Configs() []*config.Config {
 	return l.configs[:l.index]
 }
 
-func (l *listStore) Reset(configs []config.Config) {
-	l.configs = configs
-	// TODO rebuild indexKey
+func (l *listStore) ReFilter(f Filter) {
+	l.index = 0
+	l.indexers = make(map[string]struct{}, 1024)
+	for i := range l.configs {
+		if f(l.configs[i]) {
+			continue
+		}
+		l.configs[l.index] = l.configs[i]
+		l.indexers[l.indexKey(l.configs[i])] = struct{}{}
+		l.index++
+	}
 }
 
-func (l *listStore) Append(conf config.Config) {
-	for _, filter := range l.filters {
-		if filter(conf) {
+func (l *listStore) Append(conf *config.Config) {
+	for l.filter != nil && l.filter(conf) {
 			return
-		}
 	}
 
 	key := l.indexKey(conf)
 	if _, ok := l.indexers[key]; ok {
 		return
 	}
-	l.indexers[key] = l.index
+	l.indexers[key] = struct{}{}
 
 	if l.index >= l.size {
 		l.build.lock.Lock()
 		l.build.initSize = int64(float64(l.build.initSize) * 1.25)
-		newConfigs := l.build.pool.Get().([]config.Config)
+		newConfigs := l.build.pool.Get().([]*config.Config)
 		l.build.lock.Unlock()
 
 		copy(newConfigs, l.configs)
@@ -440,9 +459,8 @@ func (l *listStore) Append(conf config.Config) {
 	l.index++
 }
 
-func (l *listStore) AppendFilter(f Filter) ListCache {
-	l.filters = append(l.filters, f)
-	return l
+func (l *listStore) AppendFilter(f Filter) {
+	l.filter = f
 }
 
 func (l *listStore) Close() {
