@@ -55,7 +55,7 @@ func (s *server) handleGetRequest(request *http.Request) (interface{}, *http2.Er
 	return convert(gvk, obj), http2.OKHandler()
 }
 
-func (s *server) list(gvk config.GroupVersionKind, opts *ListOptions) ([]*config.Config, error) {
+func (s *server) list(gvk config.GroupVersionKind, convert convertFn, opts *ListOptions) (int, []metav1.Object, error) {
 	if !opts.isRefList() {
 		cache := s.cb.Build()
 		defer cache.Close()
@@ -64,14 +64,15 @@ func (s *server) list(gvk config.GroupVersionKind, opts *ListOptions) ([]*config
 		})
 		err := s.store.ListWithCache(gvk, model.NamespaceAll, cache)
 		if err != nil {
-			return nil, err
+			return 0, nil, err
 		}
-		return cache.Configs(), nil
+		total, data := s.freshData(cache.Configs(), convert, gvk, opts)
+		return total, data, nil
 	}
 
 	confs, err := s.indexedStore.byRefIndexer(opts.getRefKey())
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 
 	ret := make([]*config.Config, 0, len(confs))
@@ -82,7 +83,22 @@ func (s *server) list(gvk config.GroupVersionKind, opts *ListOptions) ([]*config
 		}
 		ret = append(ret, &conf)
 	}
-	return ret, nil
+	total, data := s.freshData(ret, convert, gvk, opts)
+	return total, data, nil
+}
+
+func (s *server) freshData(confs []*config.Config, convert convertFn, gvk config.GroupVersionKind, opts *ListOptions) (int, []metav1.Object) {
+	var total int
+	sortConfigByCreationTime(confs)
+	total, confs = paginateResource(opts, confs)
+
+	annotatedConfigs(s.indexedStore, confs, gvk)
+
+	ret := make([]metav1.Object, len(confs))
+	for idx, c := range confs {
+		ret[idx] = convert(gvk, c)
+	}
+	return total, ret
 }
 
 func (s *server) handleListRequest(request *http.Request) (interface{}, *http2.Error) {
@@ -100,19 +116,9 @@ func (s *server) handleListRequest(request *http.Request) (interface{}, *http2.E
 		return nil, http2.BadRequestHander(fmt.Errorf("the kind %s is not support", opt.Kind))
 	}
 
-	confs, err := s.list(gvk, opt)
+	total, confs, err := s.list(gvk, convert, opt)
 	if err != nil {
 		return nil, http2.InternalServerHandler(err)
-	}
-
-	sortConfigByCreationTime(confs)
-	total, confs := paginateResource(opt, confs)
-
-	annotatedConfigs(s.indexedStore, confs, gvk)
-
-	ret := make([]metav1.Object, len(confs))
-	for idx, c := range confs {
-		ret[idx] = convert(gvk, c)
 	}
 
 	return &ResourceList{
