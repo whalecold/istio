@@ -332,13 +332,13 @@ func (c *controller) ListWithCache(typ config.GroupVersionKind, namespace string
 			ConvertIngressVirtualService(*ingress, c.domainSuffix, ingressByHost, c.serviceLister)
 		case gvk.Gateway:
 			gateways := ConvertIngressV1alpha3(*ingress, c.meshWatcher.Mesh(), c.domainSuffix)
-			cache.Append(gateways)
+			cache.Append(&gateways)
 		}
 	}
 
 	if typ == gvk.VirtualService {
 		for _, obj := range ingressByHost {
-			cache.Append(*obj)
+			cache.Append(obj)
 		}
 	}
 	return nil

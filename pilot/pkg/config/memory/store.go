@@ -50,18 +50,18 @@ func MakeSkipValidation(schemas collection.Schemas) model.ConfigStore {
 func newStore(schemas collection.Schemas, skipValidation bool) model.ConfigStore {
 	out := store{
 		schemas:        schemas,
-		data:           make(map[config.GroupVersionKind]map[string]map[string]config.Config),
+		data:           make(map[config.GroupVersionKind]map[string]map[string]*config.Config),
 		skipValidation: skipValidation,
 	}
 	for _, s := range schemas.All() {
-		out.data[s.Resource().GroupVersionKind()] = make(map[string]map[string]config.Config)
+		out.data[s.Resource().GroupVersionKind()] = make(map[string]map[string]*config.Config)
 	}
 	return &out
 }
 
 type store struct {
 	schemas        collection.Schemas
-	data           map[config.GroupVersionKind]map[string]map[string]config.Config
+	data           map[config.GroupVersionKind]map[string]map[string]*config.Config
 	skipValidation bool
 	mutex          sync.RWMutex
 }
@@ -87,7 +87,7 @@ func (cr *store) Get(kind config.GroupVersionKind, name, namespace string) *conf
 	if !exists {
 		return nil
 	}
-	return &out
+	return out
 }
 
 func (cr *store) ListWithCache(kind config.GroupVersionKind, namespace string, cache model.ListCache) error {
@@ -127,7 +127,7 @@ func (cr *store) List(kind config.GroupVersionKind, namespace string) ([]config.
 	if namespace == "" {
 		for _, ns := range data {
 			for _, val := range ns {
-				out = append(out, val)
+				out = append(out, *val)
 			}
 		}
 	} else {
@@ -136,7 +136,7 @@ func (cr *store) List(kind config.GroupVersionKind, namespace string) ([]config.
 			return nil, nil
 		}
 		for _, val := range ns {
-			out = append(out, val)
+			out = append(out, *val)
 		}
 	}
 	return out, nil
@@ -178,7 +178,7 @@ func (cr *store) Create(cfg config.Config) (string, error) {
 	}
 	ns, exists := cr.data[kind][cfg.Namespace]
 	if !exists {
-		ns = make(map[string]config.Config)
+		ns = make(map[string]*config.Config)
 		cr.data[kind][cfg.Namespace] = ns
 	}
 
@@ -194,7 +194,7 @@ func (cr *store) Create(cfg config.Config) (string, error) {
 			cfg.CreationTimestamp = tnow
 		}
 
-		ns[cfg.Name] = cfg
+		ns[cfg.Name] = &cfg
 		return cfg.ResourceVersion, nil
 	}
 	return "", errAlreadyExists
@@ -223,7 +223,7 @@ func (cr *store) Update(cfg config.Config) (string, error) {
 	if !exists {
 		return "", errNotFound
 	}
-	if hasConflict(existing, cfg) {
+	if hasConflict(existing, &cfg) {
 		return "", errConflict
 	}
 	if cfg.Annotations != nil && cfg.Annotations[ResourceVersion] != "" {
@@ -233,7 +233,7 @@ func (cr *store) Update(cfg config.Config) (string, error) {
 		cfg.ResourceVersion = time.Now().String()
 	}
 
-	ns[cfg.Name] = cfg
+	ns[cfg.Name] = &cfg
 	return cfg.ResourceVersion, nil
 }
 
@@ -269,12 +269,12 @@ func (cr *store) Patch(orig config.Config, patchFn config.PatchFunc) (string, er
 
 	rev := time.Now().String()
 	cfg.ResourceVersion = rev
-	ns[cfg.Name] = cfg
+	ns[cfg.Name] = &cfg
 	return rev, nil
 }
 
 // hasConflict checks if the two resources have a conflict, which will block Update calls
-func hasConflict(existing, replacement config.Config) bool {
+func hasConflict(existing, replacement *config.Config) bool {
 	if replacement.ResourceVersion == "" {
 		// We don't care about resource version, so just always overwrite
 		return false

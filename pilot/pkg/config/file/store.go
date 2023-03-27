@@ -81,20 +81,21 @@ func (s *KubeSource) Get(typ config.GroupVersionKind, name, namespace string) *c
 }
 
 func (s *KubeSource) ListWithCache(typ config.GroupVersionKind, namespace string, cache model.ListCache) error {
-	err := s.inner.ListWithCache(typ, namespace, cache)
-	if err != nil {
-		return err
-	}
-	if s.namespacesFilter != nil {
-		var out []config.Config
-		for _, config := range cache.Configs() {
-			if s.namespacesFilter(config) {
-				out = append(out, config)
-			}
-		}
-		cache.Reset(out)
-		return err
-	}
+	// TODO list cache
+	//err := s.inner.ListWithCache(typ, namespace, cache)
+	//if err != nil {
+	//	return err
+	//}
+	//if s.namespacesFilter != nil {
+	//	var out []config.Config
+	//	for _, config := range cache.Configs() {
+	//		if s.namespacesFilter(config) {
+	//			out = append(out, config)
+	//		}
+	//	}
+	//	cache.Reset(out)
+	//	return err
+	//}
 	return nil
 }
 

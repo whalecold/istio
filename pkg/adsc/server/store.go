@@ -7,8 +7,6 @@ import (
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/constants"
 	"istio.io/istio/pkg/config/schema/gvk"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
@@ -36,11 +34,10 @@ func keyForConfigFunc(cfg config.Config) string {
 		cfg.Namespace + "/" + cfg.Name
 }
 
-func keyForMetaFunc(cfg metav1.Object) string {
-	source, _ := cfg.GetAnnotations()[constants.MCPServerSource]
-	gvk := (cfg).(schema.ObjectKind)
-	return source + "/" + gvk.GroupVersionKind().String() + "/" +
-		cfg.GetNamespace() + "/" + cfg.GetName()
+func keyForMetaFunc(cfg *config.Config) string {
+	source, _ := cfg.Annotations[constants.MCPServerSource]
+	return source + "/" + cfg.GroupVersionKind.String() + "/" +
+		cfg.Namespace + "/" + cfg.Name
 }
 
 func newStore() *serviceInstancesStore {

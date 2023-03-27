@@ -7,7 +7,6 @@ import (
 	"istio.io/istio/pilot/pkg/model"
 	http2 "istio.io/istio/pkg/adsc/server/http"
 	"istio.io/istio/pkg/config"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func (s *server) serviceEntryHandler(_, cur config.Config, event model.Event) {
@@ -54,40 +53,37 @@ func (s *server) handleGetRequest(request *http.Request) (interface{}, *http2.Er
 	return convert(gvk, obj), http2.OKHandler()
 }
 
-func (s *server) list(gvk config.GroupVersionKind, convert convertFn, opts *ListOptions) ([]metav1.Object, error) {
+func (s *server) list(gvk config.GroupVersionKind, convert convertFn, opts *ListOptions) ([]config.Config, error) {
 	if !opts.isRefList() {
-		objs, err := s.store.List(gvk, opts.Namespace())
+		cache := s.cb.Build()
+		defer cache.Close()
+		cache.AppendFilter(func(conf config.Config) bool {
+			return opts.skip(conf)
+		})
+		err := s.store.ListWithCache(gvk, model.NamespaceAll, cache)
 		if err != nil {
 			return nil, err
 		}
-
-		ret := make([]metav1.Object, 0, len(objs))
-		for i := range objs {
-			if opts.skip(objs[i]) {
-				continue
-			}
-			ret = append(ret, convert(gvk, &objs[i]))
-		}
-		return ret, nil
+		return cache.Configs(), nil
 	}
 
-	confs, err := s.indexedStore.byRefIndexer(opts.getRefKey())
-	if err != nil {
-		return nil, err
-	}
+	//confs, err := s.indexedStore.byRefIndexer(opts.getRefKey())
+	//if err != nil {
+	//	return nil, err
+	//}
 
-	ret := make([]metav1.Object, 0, len(confs))
-	for i := range confs {
-		conf := confs[i].(config.Config)
-		if opts.skip(conf) {
-			continue
-		}
-		temp := convert(gvk, &conf)
-		if temp != nil {
-			ret = append(ret, temp)
-		}
-	}
-	return ret, nil
+	//ret := make([]metav1.Object, 0, len(confs))
+	//for i := range confs {
+	//	conf := confs[i].(config.Config)
+	//	if opts.skip(conf) {
+	//		continue
+	//	}
+	//	temp := convert(gvk, &conf)
+	//	if temp != nil {
+	//		ret = append(ret, temp)
+	//	}
+	//}
+	return nil, nil
 }
 
 func (s *server) handleListRequest(request *http.Request) (interface{}, *http2.Error) {

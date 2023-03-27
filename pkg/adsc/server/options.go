@@ -13,7 +13,6 @@ import (
 	"istio.io/istio/pkg/config/schema/gvk"
 
 	"istio.io/istio/pkg/config"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -115,7 +114,7 @@ func (l *ListOptions) InNamespaces(ns string) bool {
 	return l.Namespaces[ns]
 }
 
-func (l *ListOptions) skip(cfg config.Config) bool {
+func (l *ListOptions) skip(cfg *config.Config) bool {
 	return !l.InNamespaces(cfg.Namespace) ||
 		!l.Matchs(labels.Set(cfg.Labels)) ||
 		!l.Contains(cfg.Name)
@@ -129,24 +128,24 @@ type GetOption struct {
 }
 
 // sortConfigByCreationTime sorts the list of config objects in ascending order by their creation time (if available).
-func sortConfigByCreationTime(configs []metav1.Object) {
+func sortConfigByCreationTime(configs []*config.Config) {
 	sort.Slice(configs, func(i, j int) bool {
 		// If creation time is the same, then behavior is nondeterministic. In this case, we can
 		// pick an arbitrary but consistent ordering based on name and namespace, which is unique.
 		// CreationTimestamp is stored in seconds, so this is not uncommon.
-		t1 := configs[i].GetCreationTimestamp()
-		t2 := configs[j].GetCreationTimestamp()
+		t1 := configs[i].CreationTimestamp
+		t2 := configs[j].CreationTimestamp
 
-		if t1.Equal(&t2) {
-			in := configs[i].GetNamespace() + "." + configs[i].GetName()
-			jn := configs[j].GetNamespace() + "." + configs[j].GetName()
+		if t1.Equal(t2) {
+			in := configs[i].Namespace + "." + configs[i].Name
+			jn := configs[j].Namespace + "." + configs[j].Name
 			return in < jn
 		}
-		return t1.After(t2.Time)
+		return t1.After(t2)
 	})
 }
 
-func paginateResource(opt *ListOptions, confs []metav1.Object) (total int, ret []metav1.Object) {
+func paginateResource(opt *ListOptions, confs []*config.Config) (total int, ret []*config.Config) {
 	total = len(confs)
 	start, limit := opt.Start, opt.Limit
 	if start >= len(confs) {
@@ -246,20 +245,21 @@ func parseNamespaces(namespaces string) map[string]bool {
 	return ret
 }
 
-func annotatedConfigs(store *serviceInstancesStore, cfgs []metav1.Object, cgvk config.GroupVersionKind) {
+func annotatedConfigs(store *serviceInstancesStore, cfgs []*config.Config, cgvk config.GroupVersionKind) {
 	if cgvk != gvk.ServiceEntry {
 		return
 	}
 	for i := range cfgs {
 		num, err := store.refIndexNumber(keyForMetaFunc(cfgs[i]))
-		if err != nil {
+		if err != nil || num == 0 {
 			continue
 		}
-		anno := cfgs[i].GetAnnotations()
-		if anno == nil {
-			anno = map[string]string{}
+		// should deep copy the configs.
+		anno := cfgs[i].Annotations
+		cfgs[i].Annotations = map[string]string{}
+		cfgs[i].Annotations[annotationInstanceNumber] = strconv.Itoa(num)
+		for key, val := range anno {
+			cfgs[i].Annotations[key] = val
 		}
-		anno[annotationInstanceNumber] = strconv.Itoa(num)
-		cfgs[i].SetAnnotations(anno)
 	}
 }

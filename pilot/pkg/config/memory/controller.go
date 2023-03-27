@@ -35,7 +35,7 @@ type Controller struct {
 
 	started atomic.Bool
 	// If meshConfig.DiscoverySelectors are specified, the namespacesFilter tracks the namespaces this controller watches.
-	namespacesFilter func(obj interface{}) bool
+	namespacesFilter func(*config.Config) bool
 }
 
 // NewController return an implementation of ConfigStoreController
@@ -95,9 +95,9 @@ func (c *Controller) Schemas() collection.Schemas {
 }
 
 func (c *Controller) Get(kind config.GroupVersionKind, key, namespace string) *config.Config {
-	if c.namespacesFilter != nil && !c.namespacesFilter(namespace) {
-		return nil
-	}
+	//if c.namespacesFilter != nil && !c.namespacesFilter(namespace) {
+	//	return nil
+	//}
 	return c.configStore.Get(kind, key, namespace)
 }
 
@@ -172,13 +172,7 @@ func (c *Controller) ListWithCache(kind config.GroupVersionKind, namespace strin
 		return err
 	}
 	if c.namespacesFilter != nil {
-		var out []config.Config
-		for _, config := range cache.Configs() {
-			if c.namespacesFilter(config) {
-				out = append(out, config)
-			}
-		}
-		cache.Reset(out)
+		cache.ReFilter(c.namespacesFilter)
 		return err
 	}
 	return nil
@@ -192,7 +186,7 @@ func (c *Controller) List(kind config.GroupVersionKind, namespace string) ([]con
 	if c.namespacesFilter != nil {
 		var out []config.Config
 		for _, config := range configs {
-			if c.namespacesFilter(config) {
+			if c.namespacesFilter(&config) {
 				out = append(out, config)
 			}
 		}

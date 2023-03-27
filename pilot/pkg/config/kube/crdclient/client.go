@@ -403,7 +403,7 @@ func (cl *Client) ListWithCache(kind config.GroupVersionKind, namespace string, 
 	for _, item := range list {
 		cfg := TranslateObject(item, kind, cl.domainSuffix)
 		if cl.objectInRevision(&cfg) {
-			cache.Append(cfg)
+			cache.Append(&cfg)
 		}
 	}
 	return nil

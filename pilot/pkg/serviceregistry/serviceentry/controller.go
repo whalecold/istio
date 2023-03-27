@@ -110,6 +110,8 @@ type Controller struct {
 	// Indicates whether this controller is for workload entries.
 	workloadEntryController bool
 
+	cacheBuilder *model.ListCacheBuilder
+
 	model.NetworkGatewaysHandler
 }
 
@@ -171,7 +173,8 @@ func newController(store model.ConfigStore, xdsUpdater model.XDSUpdater, options
 		services: serviceStore{
 			servicesBySE: map[types.NamespacedName][]*model.Service{},
 		},
-		edsQueue: queue.NewQueue(time.Second),
+		edsQueue:     queue.NewQueue(time.Second),
+		cacheBuilder: model.NewBuilder(),
 	}
 	for _, o := range options {
 		o(s)
@@ -248,8 +251,10 @@ func (s *Controller) workloadEntryHandler(old, curr config.Config, event model.E
 	}
 
 	t1 := time.Now()
-	cache := model.DefaultListCache()
-	filter := func(cfg config.Config) bool {
+	cache := s.cacheBuilder.Build()
+	defer cache.Close()
+
+	filter := func(cfg *config.Config) bool {
 		se := cfg.Spec.(*networking.ServiceEntry)
 		if se.WorkloadSelector != nil && labels.Instance(se.WorkloadSelector.Labels).SubsetOf(wle.Labels) {
 			return false
@@ -259,9 +264,11 @@ func (s *Controller) workloadEntryHandler(old, curr config.Config, event model.E
 		}
 		return true
 	}
-	cache.AppendFilter(filter)
+	cache.SetFilter(filter)
 	_ = s.store.ListWithCache(gvk.ServiceEntry, curr.Namespace, cache)
+	//confs, _ := s.store.List(gvk.ServiceEntry, curr.Namespace)
 	log.Infof("list duration %s...", time.Since(t1))
+
 	currSes := getWorkloadServiceEntries(cache.Configs(), wle)
 	var oldSes map[types.NamespacedName]*config.Config
 	if oldWle != nil {
