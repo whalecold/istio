@@ -34,9 +34,8 @@ func keyForConfigFunc(cfg config.Config) string {
 		cfg.Namespace + "/" + cfg.Name
 }
 
-func keyForMetaFunc(cfg *config.Config) string {
-	source, _ := cfg.Annotations[constants.MCPServerSource]
-	return source + "/" + cfg.GroupVersionKind.String() + "/" +
+func keyForRefIndexer(cfg *config.Config) string {
+	return cfg.GroupVersionKind.String() + "/" +
 		cfg.Namespace + "/" + cfg.Name
 }
 

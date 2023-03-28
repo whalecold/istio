@@ -250,7 +250,7 @@ func annotatedConfigs(store *serviceInstancesStore, cfgs []*config.Config, cgvk 
 		return
 	}
 	for i := range cfgs {
-		num, err := store.refIndexNumber(keyForMetaFunc(cfgs[i]))
+		num, err := store.refIndexNumber(keyForRefIndexer(cfgs[i]))
 		if err != nil || num == 0 {
 			continue
 		}
