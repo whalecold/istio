@@ -29,7 +29,6 @@ import (
 	"istio.io/istio/pkg/config/schema/kind"
 	netutil "istio.io/istio/pkg/util/net"
 	"istio.io/istio/pkg/util/sets"
-	"sync"
 )
 
 // Statically link protobuf descriptors from UDPA
@@ -364,45 +363,19 @@ func defaultIndexKey(cfg *config.Config) string {
 	return sb.String()
 }
 
-type ListCacheBuilder struct {
-	initSize int64
-	pool     *sync.Pool
-	indexer  func(cfg *config.Config) string
-	lock     sync.RWMutex
-}
-
-func NewBuilder() *ListCacheBuilder {
-	b := &ListCacheBuilder{
-		indexer:  defaultIndexKey,
-		initSize: ListCacheSize,
-	}
-	b.pool = &sync.Pool{
-		New: func() interface{} {
-			return make([]*config.Config, b.initSize)
-		},
-	}
-	return b
-}
-
-func (lcb *ListCacheBuilder) Build() ListCache {
-	lcb.lock.RLock()
-	defer lcb.lock.RUnlock()
-	ls := &listStore{
-		size:     lcb.initSize,
-		indexKey: lcb.indexer,
-		indexers: make(map[string]struct{}, 1024),
-		configs:  lcb.pool.Get().([]*config.Config),
-		build:    lcb,
-	}
-	return ls
-}
-
 type ListCache interface {
 	Append(config *config.Config)
 	AppendFilter(Filter)
 	Configs() []*config.Config
 	ReFilter(f Filter)
-	Close()
+}
+
+func DefaultCache() ListCache {
+	return &listStore{
+		configs: make([]*config.Config, 0, ListCacheSize),
+		indexKey: defaultIndexKey,
+		indexers: make(map[string]struct{}),
+	}
 }
 
 type listStore struct {
@@ -410,26 +383,24 @@ type listStore struct {
 	indexers map[string]struct{}
 	indexKey func(*config.Config) string
 	filter   Filter
-	size     int64
-	index    int64
-	build    *ListCacheBuilder
 }
 
 func (l *listStore) Configs() []*config.Config {
-	return l.configs[:l.index]
+	return l.configs
 }
 
 func (l *listStore) ReFilter(f Filter) {
-	l.index = 0
 	l.indexers = make(map[string]struct{}, 1024)
+	var idx int
 	for i := range l.configs {
 		if f(l.configs[i]) {
 			continue
 		}
-		l.configs[l.index] = l.configs[i]
+		l.configs[idx] = l.configs[i]
 		l.indexers[l.indexKey(l.configs[i])] = struct{}{}
-		l.index++
+		idx++
 	}
+	l.configs = l.configs[:idx]
 }
 
 func (l *listStore) Append(conf *config.Config) {
@@ -442,29 +413,11 @@ func (l *listStore) Append(conf *config.Config) {
 		return
 	}
 	l.indexers[key] = struct{}{}
-
-	if l.index >= l.size {
-		l.build.lock.Lock()
-		l.build.initSize = int64(float64(l.build.initSize) * 1.25)
-		newConfigs := l.build.pool.Get().([]*config.Config)
-		l.build.lock.Unlock()
-
-		copy(newConfigs, l.configs)
-		l.build.pool.Put(l.configs)
-		l.configs = newConfigs
-		l.configs[l.index] = conf
-	} else {
-		l.configs[l.index] = conf
-	}
-	l.index++
+	l.configs = append(l.configs, conf)
 }
 
 func (l *listStore) AppendFilter(f Filter) {
 	l.filter = f
 }
 
-func (l *listStore) Close() {
-	l.build.pool.Put(l.configs)
-}
-
-const ListCacheSize = 60000
+const ListCacheSize = 5000

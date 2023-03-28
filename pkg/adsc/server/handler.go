@@ -57,8 +57,7 @@ func (s *server) handleGetRequest(request *http.Request) (interface{}, *http2.Er
 
 func (s *server) list(gvk config.GroupVersionKind, convert convertFn, opts *ListOptions) (int, []metav1.Object, error) {
 	if !opts.isRefList() {
-		cache := s.cb.Build()
-		defer cache.Close()
+		cache := model.DefaultCache()
 		cache.AppendFilter(func(conf *config.Config) bool {
 			return opts.skip(conf)
 		})

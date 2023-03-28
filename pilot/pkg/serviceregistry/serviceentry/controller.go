@@ -110,8 +110,6 @@ type Controller struct {
 	// Indicates whether this controller is for workload entries.
 	workloadEntryController bool
 
-	cacheBuilder *model.ListCacheBuilder
-
 	model.NetworkGatewaysHandler
 }
 
@@ -173,8 +171,7 @@ func newController(store model.ConfigStore, xdsUpdater model.XDSUpdater, options
 		services: serviceStore{
 			servicesBySE: map[types.NamespacedName][]*model.Service{},
 		},
-		edsQueue:     queue.NewQueue(time.Second),
-		cacheBuilder: model.NewBuilder(),
+		edsQueue: queue.NewQueue(time.Second),
 	}
 	for _, o := range options {
 		o(s)
@@ -251,8 +248,7 @@ func (s *Controller) workloadEntryHandler(old, curr config.Config, event model.E
 	}
 
 	t1 := time.Now()
-	cache := s.cacheBuilder.Build()
-	defer cache.Close()
+	cache := model.DefaultCache()
 
 	filter := func(cfg *config.Config) bool {
 		se := cfg.Spec.(*networking.ServiceEntry)

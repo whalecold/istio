@@ -34,7 +34,6 @@ type server struct {
 	kinds        map[string]config.GroupVersionKind
 	convertFns   map[config.GroupVersionKind]convertFn
 	indexedStore *serviceInstancesStore
-	cb           *model.ListCacheBuilder
 }
 
 // New query server.
@@ -43,7 +42,6 @@ func New(store model.ConfigStoreController, p int) Server {
 		store:        store,
 		port:         p,
 		indexedStore: newStore(),
-		cb:           model.NewBuilder(),
 	}
 	s.kinds = map[string]config.GroupVersionKind{
 		serviceEntryKind:  gvk.ServiceEntry,
