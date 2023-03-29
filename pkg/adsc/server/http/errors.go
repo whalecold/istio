@@ -1,6 +1,7 @@
 package http
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 )
@@ -48,6 +49,9 @@ var (
 	}
 	InternalServerHandler = func(e error) *Error {
 		return buildError(e, http.StatusInternalServerError)
+	}
+	TooManyRequestsHandler = func() *Error {
+		return buildError(fmt.Errorf("too many requests"), http.StatusTooManyRequests)
 	}
 	OKHandler = func() *Error {
 		return nil

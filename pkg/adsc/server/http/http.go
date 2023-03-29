@@ -2,8 +2,11 @@ package http
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 )
+
+const abortIndex int = math.MaxInt / 2
 
 type Server struct {
 	address string
@@ -50,6 +53,10 @@ type HandleContext struct {
 	Request    *http.Request
 }
 
+func (c *HandleContext) Abort() {
+	c.index = abortIndex
+}
+
 func (c *HandleContext) Next() {
 	c.index++
 	for c.index <= len(c.middleware) {
@@ -85,9 +92,7 @@ func handleResponse(w http.ResponseWriter, ret interface{}, err *Error) {
 		Result: ret,
 	}
 	out, _ := json.Marshal(resp)
-	if err.GetCode() != http.StatusOK {
-		w.WriteHeader(err.GetCode())
-	}
+	w.WriteHeader(err.GetCode())
 	w.Write(out)
 }
 
@@ -101,12 +106,19 @@ func buildHandler(fn Handler) http.Handler {
 // ResponseWriter the wrapper of http ResponseWriter
 type ResponseWriter interface {
 	StatusCode() int
+	Done()
 	http.ResponseWriter
 }
 
 type mcpResponse struct {
-	w    http.ResponseWriter
-	code int
+	w        http.ResponseWriter
+	code     int
+	response []byte
+}
+
+func (mr *mcpResponse) Done() {
+	mr.w.WriteHeader(mr.code)
+	mr.w.Write(mr.response)
 }
 
 func (mr *mcpResponse) Header() http.Header {
@@ -114,11 +126,11 @@ func (mr *mcpResponse) Header() http.Header {
 }
 
 func (mr *mcpResponse) Write(bs []byte) (int, error) {
-	return mr.w.Write(bs)
+	mr.response = bs
+	return len(bs), nil
 }
 func (mr *mcpResponse) WriteHeader(statusCode int) {
 	mr.code = statusCode
-	mr.w.WriteHeader(statusCode)
 }
 
 func (mr *mcpResponse) StatusCode() int {
