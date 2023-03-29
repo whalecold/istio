@@ -214,12 +214,15 @@ func (s *stream) handleDeltaDiscoveryResponse(msg *discovery.DeltaDiscoveryRespo
 	// Two condition will happen:
 	//   1. The first time connect to the mcp server, full update is same as incremental update.
 	//   2. The network do not work temporary and connect again, the changes during the disconnection can't be tracked.
-	s.resourceLock.Lock()
-	if _, ok := s.resourceTypeNonce[msg.TypeUrl]; ok {
+	s.resourceLock.RLock()
+	_, ok := s.resourceTypeNonce[msg.TypeUrl]
+	s.resourceLock.RUnlock()
+	if ok {
 		s.incrementalUpdateResource(groupVersionKind, msg)
 	} else {
 		s.fullUpdateResource(groupVersionKind, msg.Resources)
 	}
+	s.resourceLock.Lock()
 	s.resourceTypeNonce[msg.TypeUrl] = msg.Nonce
 	s.resourceLock.Unlock()
 	s.ack(msg)

@@ -15,11 +15,6 @@
 package memory
 
 import (
-	"sync"
-
-	"time"
-
-	"go.uber.org/atomic"
 	"istio.io/istio/pilot/pkg/model"
 	config2 "istio.io/istio/pkg/config"
 	"istio.io/pkg/log"
@@ -53,11 +48,6 @@ type configStoreMonitor struct {
 	eventCh  chan ConfigEvent
 	// If enabled, events will be handled synchronously
 	sync bool
-
-	buffers []ConfigEvent
-
-	closed atomic.Bool
-	lock   sync.Locker
 }
 
 // NewMonitor returns new Monitor implementation with a default event buffer size.
@@ -65,13 +55,13 @@ func NewMonitor(store model.ConfigStore) Monitor {
 	return newBufferedMonitor(store, BufferSize, false)
 }
 
-// NewSyncMonitor returns new Monitor implementation which will process events synchronously
+// NewMonitor returns new Monitor implementation which will process events synchronously
 func NewSyncMonitor(store model.ConfigStore) Monitor {
 	return newBufferedMonitor(store, BufferSize, true)
 }
 
-// newBufferedMonitor returns new Monitor implementation with the specified event buffer size
-func newBufferedMonitor(store model.ConfigStore, bufferSize int, syncMod bool) Monitor {
+// NewBufferedMonitor returns new Monitor implementation with the specified event buffer size
+func newBufferedMonitor(store model.ConfigStore, bufferSize int, sync bool) Monitor {
 	handlers := make(map[config2.GroupVersionKind][]Handler)
 
 	for _, s := range store.Schemas().All() {
@@ -82,24 +72,15 @@ func newBufferedMonitor(store model.ConfigStore, bufferSize int, syncMod bool) M
 		store:    store,
 		handlers: handlers,
 		eventCh:  make(chan ConfigEvent, bufferSize),
-		sync:     syncMod,
-		lock:     &sync.RWMutex{},
+		sync:     sync,
 	}
 }
 
 func (m *configStoreMonitor) ScheduleProcessEvent(configEvent ConfigEvent) {
-	if m.closed.Load() {
-		return
-	}
 	if m.sync {
 		m.processConfigEvent(configEvent)
 	} else {
-		m.lock.Lock()
-		if m.buffers == nil {
-			m.buffers = make([]ConfigEvent, 0, BufferSize*10)
-		}
-		m.buffers = append(m.buffers, configEvent)
-		m.lock.Unlock()
+		m.eventCh <- configEvent
 	}
 }
 
@@ -108,21 +89,14 @@ func (m *configStoreMonitor) Run(stop <-chan struct{}) {
 		<-stop
 		return
 	}
-
 	for {
-		var buffers []ConfigEvent
-		m.lock.Lock()
-		buffers = m.buffers
-		m.buffers = nil
-		m.lock.Unlock()
-		for i := range buffers {
-			m.processConfigEvent(buffers[i])
-		}
 		select {
 		case <-stop:
-			m.closed.Store(true)
-			break
-		case <-time.After(time.Millisecond * 100):
+			return
+		case ce, ok := <-m.eventCh:
+			if ok {
+				m.processConfigEvent(ce)
+			}
 		}
 	}
 }

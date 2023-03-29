@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega"
+	"istio.io/istio/pkg/config"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -61,81 +62,81 @@ func TestParseListOptions(t *testing.T) {
 	}
 }
 
-//func TestPaginateResource(t *testing.T) {
-//	g := gomega.NewWithT(t)
-//	testCases := []struct {
-//		input []config.Config
-//		want  []config.Config
-//		opts  *ListOptions
-//	}{
-//		{
-//			input: []config.Config{
-//				{
-//					Meta: config.Meta{
-//						Name: "c1",
-//						Labels: map[string]string{
-//							"app":     "c",
-//							"version": "v1",
-//						},
-//					},
-//				},
-//				{
-//					Meta: config.Meta{
-//						Name: "c2",
-//						Labels: map[string]string{
-//							"app":     "c",
-//							"version": "v2",
-//						},
-//					},
-//				},
-//			},
-//			want: []config.Config{
-//				{
-//					Meta: config.Meta{
-//						Name: "c2",
-//						Labels: map[string]string{
-//							"app":     "c",
-//							"version": "v2",
-//						},
-//					},
-//				},
-//			},
-//			opts: &ListOptions{
-//				Limit: 1,
-//				Start: 1,
-//			},
-//		},
-//		{
-//			input: []config.Config{
-//				{
-//					Meta: config.Meta{
-//						Name: "c1",
-//						Labels: map[string]string{
-//							"app":     "c",
-//							"version": "v1",
-//						},
-//					},
-//				},
-//				{
-//					Meta: config.Meta{
-//						Name: "c2",
-//						Labels: map[string]string{
-//							"app":     "c",
-//							"version": "v2",
-//						},
-//					},
-//				},
-//			},
-//			want: []config.Config{},
-//			opts: &ListOptions{
-//				Start: 3,
-//				Limit: 3,
-//			},
-//		},
-//	}
-//
-//	for _, tc := range testCases {
-//		_, got := paginateResource(tc.opts, tc.input)
-//		g.Expect(got).To(gomega.Equal(tc.want))
-//	}
-//}
+func TestPaginateResource(t *testing.T) {
+	g := gomega.NewWithT(t)
+	testCases := []struct {
+		input []*config.Config
+		want  []*config.Config
+		opts  *ListOptions
+	}{
+		{
+			input: []*config.Config{
+				{
+					Meta: config.Meta{
+						Name: "c1",
+						Labels: map[string]string{
+							"app":     "c",
+							"version": "v1",
+						},
+					},
+				},
+				{
+					Meta: config.Meta{
+						Name: "c2",
+						Labels: map[string]string{
+							"app":     "c",
+							"version": "v2",
+						},
+					},
+				},
+			},
+			want: []*config.Config{
+				{
+					Meta: config.Meta{
+						Name: "c2",
+						Labels: map[string]string{
+							"app":     "c",
+							"version": "v2",
+						},
+					},
+				},
+			},
+			opts: &ListOptions{
+				Limit: 1,
+				Start: 1,
+			},
+		},
+		{
+			input: []*config.Config{
+				{
+					Meta: config.Meta{
+						Name: "c1",
+						Labels: map[string]string{
+							"app":     "c",
+							"version": "v1",
+						},
+					},
+				},
+				{
+					Meta: config.Meta{
+						Name: "c2",
+						Labels: map[string]string{
+							"app":     "c",
+							"version": "v2",
+						},
+					},
+				},
+			},
+			want: []*config.Config{},
+			opts: &ListOptions{
+				Start: 3,
+				Limit: 3,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		_, got := paginateResource(tc.opts, tc.input)
+		g.Expect(got).To(gomega.Equal(tc.want))
+	}
+}

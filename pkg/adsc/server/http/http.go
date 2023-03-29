@@ -107,6 +107,7 @@ func buildHandler(fn Handler) http.Handler {
 type ResponseWriter interface {
 	StatusCode() int
 	Done()
+	WriteError(*Error)
 	http.ResponseWriter
 }
 
@@ -114,6 +115,14 @@ type mcpResponse struct {
 	w        http.ResponseWriter
 	code     int
 	response []byte
+}
+
+func (mr *mcpResponse) WriteError(err *Error) {
+	resp := &Response{
+		Error: err,
+	}
+	mr.response, _ = json.Marshal(resp)
+	mr.code = err.GetCode()
 }
 
 func (mr *mcpResponse) Done() {

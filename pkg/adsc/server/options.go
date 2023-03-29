@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	http2 "istio.io/istio/pkg/adsc/server/http"
 	"istio.io/istio/pkg/config/schema/gvk"
 
 	"istio.io/istio/pkg/config"
@@ -28,12 +27,6 @@ const (
 
 	annotationInstanceNumber = "sidecar.mesh.io/instance-number"
 )
-
-// Response ...
-type Response struct {
-	Error  *http2.Error `json:"error,omitempty"`
-	Result interface{}  `json:"result,omitempty"`
-}
 
 // ResourceList ...
 type ResourceList struct {
@@ -55,7 +48,7 @@ type ListOptions struct {
 	// Query the resource that belongs to the ref.
 	refKey string
 
-	needFilter bool
+	isEmptyFilter bool
 }
 
 func (l *ListOptions) isRefList() bool {
@@ -64,18 +57,6 @@ func (l *ListOptions) isRefList() bool {
 
 func (l *ListOptions) getRefKey() string {
 	return l.refKey
-}
-
-func (l *ListOptions) refGroupVersionKind() config.GroupVersionKind {
-	refs := strings.Split(l.refKey, "/")
-	if len(refs) != 5 {
-		return config.GroupVersionKind{}
-	}
-	return config.GroupVersionKind{
-		Group:   refs[0],
-		Version: refs[1],
-		Kind:    refs[2],
-	}
 }
 
 func (l *ListOptions) Contains(name string) bool {
@@ -117,7 +98,7 @@ func (l *ListOptions) InNamespaces(ns string) bool {
 }
 
 func (l *ListOptions) skip(cfg *config.Config) bool {
-	if !l.needFilter {
+	if l.isEmptyFilter {
 		return false
 	}
 
@@ -186,7 +167,7 @@ func parseListOptions(request *http.Request) (*ListOptions, error) {
 	}
 
 	if opts.Selector.Empty() && len(opts.Namespaces) == 0 && opts.Query == "" {
-		opts.needFilter = false
+		opts.isEmptyFilter = true
 	}
 
 	return opts, nil

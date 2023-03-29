@@ -1,6 +1,8 @@
 package server
 
 import (
+	"strings"
+
 	networking "istio.io/api/networking/v1alpha3"
 	"k8s.io/client-go/tools/cache"
 
@@ -24,19 +26,25 @@ func refIndexer(obj interface{}) ([]string, error) {
 	}
 	// Should be in the same namespace when using refIndexer.
 	// Use the service account as it is kept consistent with the ServiceEntry name.
-	return []string{gvk.ServiceEntry.String() +
-		"/" + cfg.Namespace + "/" + we.ServiceAccount}, nil
+
+	str := []string{gvk.ServiceEntry.CanonicalGroup(), gvk.ServiceEntry.Version,
+		gvk.ServiceEntry.Kind, cfg.Namespace, we.ServiceAccount}
+	return []string{
+		strings.Join(str, "/"),
+	}, nil
 }
 
 func keyForConfigFunc(cfg config.Config) string {
 	source, _ := cfg.Annotations[constants.MCPServerSource]
-	return source + "/" + cfg.GroupVersionKind.String() + "/" +
-		cfg.Namespace + "/" + cfg.Name
+	str := []string{source, cfg.GroupVersionKind.CanonicalGroup(), cfg.GroupVersionKind.Version,
+		cfg.GroupVersionKind.Kind, cfg.Namespace, cfg.Name}
+	return strings.Join(str, "/")
 }
 
 func keyForRefIndexer(cfg *config.Config) string {
-	return cfg.GroupVersionKind.String() + "/" +
-		cfg.Namespace + "/" + cfg.Name
+	str := []string{cfg.GroupVersionKind.CanonicalGroup(), cfg.GroupVersionKind.Version,
+		cfg.GroupVersionKind.Kind, cfg.Namespace, cfg.Name}
+	return strings.Join(str, "/")
 }
 
 func newStore() *serviceInstancesStore {

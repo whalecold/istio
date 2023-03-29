@@ -69,7 +69,7 @@ func New(upstream, url, nodeID string, requests []*discovery.DeltaDiscoveryReque
 		backoffPolicy: backoff.NewExponentialBackOff(),
 	}
 	store := memory.MakeSkipValidation(collections.PilotMCP)
-	configController := memory.NewController(store)
+	configController := memory.NewSyncController(store)
 	configController.RegisterHasSyncedHandler(c.HasSynced)
 	c.store = configController
 	return c, nil

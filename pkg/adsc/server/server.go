@@ -52,15 +52,16 @@ func New(store model.ConfigStoreController, p int) Server {
 		port:         p,
 		indexedStore: newStore(),
 		limiter:      rate.NewLimiter(rate.Limit(mcpServerQPS.Get()), mcpServerBurst.Get()),
+		kinds: map[string]config.GroupVersionKind{
+			serviceEntryKind:  gvk.ServiceEntry,
+			workloadEntryKind: gvk.WorkloadEntry,
+		},
+		convertFns: map[config.GroupVersionKind]convertFn{
+			gvk.ServiceEntry:  convertToK8sServiceEntry,
+			gvk.WorkloadEntry: convertToK8sWorkloadEntry,
+		},
 	}
-	s.kinds = map[string]config.GroupVersionKind{
-		serviceEntryKind:  gvk.ServiceEntry,
-		workloadEntryKind: gvk.WorkloadEntry,
-	}
-	s.convertFns = map[config.GroupVersionKind]convertFn{
-		gvk.ServiceEntry:  convertToK8sServiceEntry,
-		gvk.WorkloadEntry: convertToK8sWorkloadEntry,
-	}
+
 	s.store.RegisterEventHandler(gvk.ServiceEntry, s.serviceEntryHandler)
 	s.store.RegisterEventHandler(gvk.WorkloadEntry, s.workloadEntryHandler)
 	return s
@@ -72,9 +73,9 @@ func (s *server) Serve() error {
 	mcplog.Infof("starting mcp server at address: %s", address)
 	return http2.New(address).
 		Use(responser).
+		Use(observer).
 		Use(s.Limiter()).
 		Use(recovery).
-		Use(observer).
 		Register("/mcp.istio.io/v1alpha1/resources", s.handleListRequest).
 		Register("/mcp.istio.io/v1alpha1/resource", s.handleGetRequest).
 		Serve()

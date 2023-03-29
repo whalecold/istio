@@ -44,7 +44,7 @@ type Controller struct {
 func NewController(cs model.ConfigStore) *Controller {
 	out := &Controller{
 		configStore: cs,
-		monitor:     NewSyncMonitor(cs),
+		monitor:     NewMonitor(cs),
 	}
 	return out
 }
