@@ -36,6 +36,8 @@ var _ = udpa.TypedStruct{}
 
 type ConfigHash uint64
 
+const ListCacheSize = 5000
+
 // NamespacedName defines a name and namespace of a resource, with the type elided. This can be used in
 // places where the type is implied.
 // This is preferred to a ConfigKey with empty Kind, especially in performance sensitive code - hashing this struct
@@ -346,23 +348,6 @@ func key(name, namespace string) string {
 // Filter return true if ignore the config
 type Filter func(*config.Config) bool
 
-func defaultIndexKey(cfg *config.Config) string {
-	var sb strings.Builder
-	sb.Grow(len(cfg.GroupVersionKind.CanonicalGroup()) +
-		len(cfg.GroupVersionKind.Version) + len(cfg.GroupVersionKind.Kind) +
-		len(cfg.Namespace) + len(cfg.Name) + 6)
-	sb.WriteString(cfg.GroupVersionKind.CanonicalGroup())
-	sb.WriteString("/")
-	sb.WriteString(cfg.GroupVersionKind.Version)
-	sb.WriteString("/")
-	sb.WriteString(cfg.GroupVersionKind.Kind)
-	sb.WriteString("/")
-	sb.WriteString(cfg.Namespace)
-	sb.WriteString("/")
-	sb.WriteString(cfg.Name)
-	return sb.String()
-}
-
 type ListCache interface {
 	Append(config *config.Config)
 	AppendFilter(Filter)
@@ -373,14 +358,13 @@ type ListCache interface {
 func DefaultCache() ListCache {
 	return &listStore{
 		configs: make([]*config.Config, 0, ListCacheSize),
-		indexKey: defaultIndexKey,
-		indexers: make(map[string]struct{}),
+		indexers: make(map[string]map[string]struct{}),
 	}
 }
 
 type listStore struct {
 	configs  []*config.Config
-	indexers map[string]struct{}
+	indexers map[string]map[string]struct{}
 	indexKey func(*config.Config) string
 	filter   Filter
 }
@@ -390,29 +374,42 @@ func (l *listStore) Configs() []*config.Config {
 }
 
 func (l *listStore) ReFilter(f Filter) {
-	l.indexers = make(map[string]struct{}, 1024)
+	l.indexers = make(map[string]map[string]struct{}, 1024)
 	var idx int
 	for i := range l.configs {
 		if f(l.configs[i]) {
 			continue
 		}
 		l.configs[idx] = l.configs[i]
-		l.indexers[l.indexKey(l.configs[i])] = struct{}{}
+		l.storeKey(l.configs[i])
 		idx++
 	}
 	l.configs = l.configs[:idx]
+}
+
+func (l *listStore)storeKey(conf *config.Config) {
+	m, ok := l.indexers[conf.Namespace]
+	if !ok {
+		m = make(map[string]struct{}, ListCacheSize)
+		l.indexers[conf.Namespace] = m
+	}
+	m[conf.Name] = struct{}{}
 }
 
 func (l *listStore) Append(conf *config.Config) {
 	for l.filter != nil && l.filter(conf) {
 			return
 	}
-
-	key := l.indexKey(conf)
-	if _, ok := l.indexers[key]; ok {
+	m, ok := l.indexers[conf.Namespace]
+	if !ok {
+		m = make(map[string]struct{})
+		l.indexers[conf.Namespace] = m
+	}
+	_, ok = m[conf.Name]
+	if ok {
 		return
 	}
-	l.indexers[key] = struct{}{}
+	m[conf.Name] = struct{}{}
 	l.configs = append(l.configs, conf)
 }
 
@@ -420,4 +417,3 @@ func (l *listStore) AppendFilter(f Filter) {
 	l.filter = f
 }
 
-const ListCacheSize = 5000

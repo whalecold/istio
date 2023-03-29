@@ -54,6 +54,8 @@ type ListOptions struct {
 
 	// Query the resource that belongs to the ref.
 	refKey string
+
+	needFilter bool
 }
 
 func (l *ListOptions) isRefList() bool {
@@ -115,6 +117,10 @@ func (l *ListOptions) InNamespaces(ns string) bool {
 }
 
 func (l *ListOptions) skip(cfg *config.Config) bool {
+	if !l.needFilter {
+		return false
+	}
+
 	return !l.InNamespaces(cfg.Namespace) ||
 		!l.Matchs(labels.Set(cfg.Labels)) ||
 		!l.Contains(cfg.Name)
@@ -133,15 +139,15 @@ func sortConfigByCreationTime(configs []*config.Config) {
 		// If creation time is the same, then behavior is nondeterministic. In this case, we can
 		// pick an arbitrary but consistent ordering based on name and namespace, which is unique.
 		// CreationTimestamp is stored in seconds, so this is not uncommon.
-		t1 := configs[i].CreationTimestamp
-		t2 := configs[j].CreationTimestamp
-
-		if t1.Equal(t2) {
-			in := configs[i].Namespace + "." + configs[i].Name
-			jn := configs[j].Namespace + "." + configs[j].Name
-			return in < jn
+		t1 := configs[i].CreationTimestamp.Nanosecond()
+		t2 := configs[j].CreationTimestamp.Nanosecond()
+		if t1 == t2 {
+			if configs[i].Namespace == configs[j].Namespace {
+				return configs[i].Name < configs[j].Name
+			}
+			return configs[i].Namespace < configs[j].Namespace
 		}
-		return t1.After(t2)
+		return t1 > t2
 	})
 }
 
@@ -175,8 +181,15 @@ func parseListOptions(request *http.Request) (*ListOptions, error) {
 	}
 
 	opts.Selector, err = parseSelector(request)
+	if err != nil {
+		return nil, err
+	}
 
-	return opts, err
+	if opts.Selector.Empty() && len(opts.Namespaces) == 0 && opts.Query == "" {
+		opts.needFilter = false
+	}
+
+	return opts, nil
 }
 
 func parseSelector(request *http.Request) (labels.Selector, error) {

@@ -785,8 +785,8 @@ var (
 
 	// PilotMCP contains only collections used by Pilot MCP.
 	PilotMCP = collection.NewSchemasBuilder().
-			MustAdd(IstioNetworkingV1Alpha3Serviceentries).
 			MustAdd(IstioNetworkingV1Alpha3Workloadentries).
+			MustAdd(IstioNetworkingV1Alpha3Serviceentries).
 			Build()
 
 	// PilotGatewayAPI contains only collections used by Pilot, including experimental Service Api.
