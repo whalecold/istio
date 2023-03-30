@@ -186,11 +186,11 @@ func addFlags(proxyCmd *cobra.Command) {
 		"File name for Istio mesh configuration. If not specified, a default mesh will be used. This may be overridden by "+
 			"PROXY_CONFIG environment variable or proxy.istio.io/config annotation.")
 	proxyCmd.PersistentFlags().IntVar(&proxyArgs.StsPort, "stsPort", 0,
-		"HTTP Port on which to serve Security Token Server (STS). If zero, STS service will not be provided.")
+		"HTTP Port on which to serve Security Token Service (STS). If zero, STS service will not be provided.")
 	proxyCmd.PersistentFlags().StringVar(&proxyArgs.TokenManagerPlugin, "tokenManagerPlugin", tokenmanager.GoogleTokenExchange,
 		"Token provider specific plugin name.")
 	// DEPRECATED. Flags for proxy configuration
-	proxyCmd.PersistentFlags().StringVar(&proxyArgs.ServiceCluster, "serviceCluster", constants.ServiceClusterName, "Server cluster")
+	proxyCmd.PersistentFlags().StringVar(&proxyArgs.ServiceCluster, "serviceCluster", constants.ServiceClusterName, "Service cluster")
 	// Log levels are provided by the library https://github.com/gabime/spdlog, used by Envoy.
 	proxyCmd.PersistentFlags().StringVar(&proxyArgs.ProxyLogLevel, "proxyLogLevel", "warning,misc:error",
 		fmt.Sprintf("The log level used to start the Envoy proxy (choose from {%s, %s, %s, %s, %s, %s, %s})."+
