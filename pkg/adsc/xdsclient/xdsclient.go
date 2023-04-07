@@ -199,6 +199,7 @@ func (c *xDSClient) handleConnection() error {
 	}
 	defer con.Close()
 
+	adscLog.Infof("start connect to source %s/%s", c.upstreamName, c.url)
 	s, err := newStream(con, c.store, c.upstreamName, c.url, c.nodeID, c.stopCh)
 	if err != nil {
 		return errors.Wrapf(err, "connect to upstream (%s/%s) failed", c.upstreamName, con.Target())
@@ -208,6 +209,7 @@ func (c *xDSClient) handleConnection() error {
 	if err != nil {
 		return errors.Wrapf(err, "send initial requests to upstream (%s/%s) failed", c.upstreamName, con.Target())
 	}
+	adscLog.Infof("send init requests to %s/%s successfully", c.upstreamName, c.url)
 	c.resetSyncedFunc(s)
 	s.handleResponse()
 	return nil

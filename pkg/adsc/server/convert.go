@@ -3,8 +3,9 @@ package server
 import (
 	networkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	clientv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
-	"istio.io/istio/pkg/config"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"istio.io/istio/pkg/config"
 )
 
 func convertToK8sWorkloadEntry(gvk config.GroupVersionKind, res *config.Config) metav1.Object {
