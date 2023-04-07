@@ -1,0 +1,36 @@
+name: resource
+trigger: [change, push]
+jobs:
+  check:
+    name: check project
+    image: hub.byted.org/istio-testing/build-tools:release-1.16-fb2454846dcbf0275675ce7d7e22e2602ff1aa38-with-envoy
+    envs:
+      GOOS: linux
+      GOARCH: amd64
+      GOPATH: /go
+      GOFLAGS: "-mod=mod"
+      GOPROXY: "https://goproxy.byted.org,https://goproxy.cn,direct"
+      GOPRIVATE: "*.byted.org"
+      GOSUMDB: "sum.golang.google.cn"
+      SHELLOPTS: errexit
+      BUILD_WITH_CONTAINER: "0"
+      ENVOY_PATH: "/usr/local/bin/envoy"
+    steps:
+      - name: Test
+        commands:
+          - make test
+          - go vet -n ./... 2> govet.out
+      - name: Lint
+        commands:
+          - make lint
+      - name: Analyse Coverage
+        uses: actions/codecov@v1
+        inputs:
+          file: "coverage.out"
+          fail_ci_if_error: true
+      - id: sonar
+        uses: actions/sonar@v1
+        inputs:
+          coverage_path: coverage.out
+          go_vet_path: govet.out
+          disable_quality_gates: "true"
