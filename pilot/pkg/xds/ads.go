@@ -303,6 +303,7 @@ func (s *DiscoveryServer) Stream(stream DiscoveryStream) error {
 	// reqChannel and the connection not being enqueued for pushes to pushChannel until the
 	// initialization is complete.
 	<-con.initialized
+	log.Infof("ADS: new connection for node:%s initialized.", con.conID)
 
 	for {
 		// Go select{} statements are not ordered; the same channel can be chosen many times.
