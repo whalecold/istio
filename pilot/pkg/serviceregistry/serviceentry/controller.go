@@ -247,8 +247,25 @@ func (s *Controller) workloadEntryHandler(old, curr config.Config, event model.E
 		}
 	}
 
-	cfgs, _ := s.store.List(gvk.ServiceEntry, curr.Namespace)
-	currSes := getWorkloadServiceEntries(cfgs, wle)
+	filter := func(cfg *config.Config) bool {
+		se := cfg.Spec.(*networking.ServiceEntry)
+		if se.WorkloadSelector == nil {
+			return true
+		}
+		if labels.Instance(se.WorkloadSelector.Labels).SubsetOf(wle.Labels) {
+			return true
+		}
+		if oldWle != nil && labels.Instance(se.WorkloadSelector.Labels).SubsetOf(oldWle.Labels) {
+			return true
+		}
+		return false
+	}
+
+	getAppender := model.NewFilterConfigGetAppenderSize(1024, model.ConfigFilterFunc(filter))
+
+	_ = s.store.ListToConfigAppender(gvk.ServiceEntry, curr.Namespace, getAppender)
+
+	currSes := getWorkloadServiceEntries(getAppender.Configs(), wle)
 	var oldSes map[types.NamespacedName]*config.Config
 	if oldWle != nil {
 		if labels.Instance(oldWle.Labels).Equals(curr.Labels) {
@@ -256,9 +273,10 @@ func (s *Controller) workloadEntryHandler(old, curr config.Config, event model.E
 		} else {
 			// labels update should trigger proxy update
 			s.XdsUpdater.ProxyUpdate(s.Cluster(), wle.Address)
-			oldSes = getWorkloadServiceEntries(cfgs, oldWle)
+			oldSes = getWorkloadServiceEntries(getAppender.Configs(), oldWle)
 		}
 	}
+
 	unSelected := difference(oldSes, currSes)
 	log.Debugf("workloadEntry %s/%s selected %v, unSelected %v serviceEntry", curr.Namespace, curr.Name, currSes, unSelected)
 	s.mutex.Lock()

@@ -66,7 +66,7 @@ func TestGetWorkloadServiceEntries(t *testing.T) {
 			},
 		},
 	}
-	ses := []config.Config{se1, se2, se3}
+	ses := []*config.Config{&se1, &se2, &se3}
 
 	wle := &networking.WorkloadEntry{
 		Address: "2.3.4.5",
