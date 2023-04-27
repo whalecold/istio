@@ -29,6 +29,18 @@ import (
 
 var errorUnsupported = errors.New("unsupported operation: the config aggregator is read-only")
 
+// deDupAppender wraps a ConfigAppender and only append unduplicated Config to the wrapped ConfigAppender.
+type deDupAppender struct {
+	model.ConfigAppender
+	seen sets.Set[string]
+}
+
+func (ap *deDupAppender) Append(c *config.Config) {
+	if !ap.seen.InsertContains(c.Meta.Key()) {
+		ap.ConfigAppender.Append(c)
+	}
+}
+
 // makeStore creates an aggregate config store from several config stores and
 // unifies their descriptors
 func makeStore(stores []model.ConfigStore, writer model.ConfigStore) (model.ConfigStore, error) {
@@ -104,6 +116,28 @@ func (cr *store) Get(typ config.GroupVersionKind, name, namespace string) *confi
 		}
 	}
 	return nil
+}
+
+func (cr *store) ListToConfigAppender(typ config.GroupVersionKind, namespace string, appender model.ConfigAppender) error {
+	if len(cr.stores[typ]) == 0 {
+		return nil
+	}
+
+	var errs *multierror.Error
+
+	ddAppender := &deDupAppender{
+		ConfigAppender: appender,
+		seen:           sets.New[string](),
+	}
+
+	for _, store := range cr.stores[typ] {
+		err := store.ListToConfigAppender(typ, namespace, ddAppender)
+		if err != nil {
+			errs = multierror.Append(errs, err)
+		}
+	}
+
+	return errs.ErrorOrNil()
 }
 
 // List all configs in the stores.

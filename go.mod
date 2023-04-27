@@ -207,7 +207,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
-	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pkg/errors v0.9.1
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/prometheus/prom2json v1.3.1 // indirect
 	github.com/prometheus/statsd_exporter v0.22.7 // indirect

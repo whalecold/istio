@@ -122,6 +122,32 @@ func (c *Controller) Get(typ config.GroupVersionKind, name, namespace string) *c
 	return nil
 }
 
+func (c *Controller) ListToConfigAppender(typ config.GroupVersionKind, namespace string, appender model.ConfigAppender) error {
+	// TODO
+	if typ != gvk.Gateway && typ != gvk.VirtualService {
+		return errUnsupportedType
+	}
+	c.stateMu.RLock()
+	defer c.stateMu.RUnlock()
+	switch typ {
+	case gvk.Gateway:
+		configs := filterNamespace(c.state.Gateway, namespace)
+		for i := range configs {
+			cfg := &configs[i]
+			appender.Append(cfg)
+		}
+	case gvk.VirtualService:
+		configs := filterNamespace(c.state.VirtualService, namespace)
+		for i := range configs {
+			cfg := &configs[i]
+			appender.Append(cfg)
+		}
+	default:
+		return errUnsupportedType
+	}
+	return nil
+}
+
 func (c *Controller) List(typ config.GroupVersionKind, namespace string) ([]config.Config, error) {
 	if typ != gvk.Gateway && typ != gvk.VirtualService {
 		return nil, errUnsupportedType

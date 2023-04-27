@@ -148,6 +148,10 @@ var (
 	Pilot = collection.NewSchemasBuilder().
 		Build()
 
+	// PilotMCP contains only collections used by Pilot MCP.
+	PilotMCP = collection.NewSchemasBuilder().
+		Build()
+
 	// PilotGatewayAPI contains only collections used by Pilot, including experimental Service Api.
 	PilotGatewayAPI = collection.NewSchemasBuilder().
 		Build()

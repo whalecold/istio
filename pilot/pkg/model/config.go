@@ -146,6 +146,9 @@ type ConfigStore interface {
 	// Use "" for the namespace to list across namespaces.
 	List(typ config.GroupVersionKind, namespace string) ([]config.Config, error)
 
+	// ListToConfigAppender
+	ListToConfigAppender(typ config.GroupVersionKind, namespace string, appender ConfigAppender) error
+
 	// Create adds a new configuration object to the store. If an object with the
 	// same name and namespace for the type already exists, the operation fails
 	// with no side effects.

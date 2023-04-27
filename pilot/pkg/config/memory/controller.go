@@ -35,7 +35,7 @@ type Controller struct {
 
 	started atomic.Bool
 	// If meshConfig.DiscoverySelectors are specified, the namespacesFilter tracks the namespaces this controller watches.
-	namespacesFilter func(obj interface{}) bool
+	namespacesFilter func(*config.Config) bool
 }
 
 // NewController return an implementation of ConfigStoreController
@@ -95,10 +95,11 @@ func (c *Controller) Schemas() collection.Schemas {
 }
 
 func (c *Controller) Get(kind config.GroupVersionKind, key, namespace string) *config.Config {
-	if c.namespacesFilter != nil && !c.namespacesFilter(namespace) {
+	conf := c.configStore.Get(kind, key, namespace)
+	if conf == nil || c.namespacesFilter != nil && !c.namespacesFilter(conf) {
 		return nil
 	}
-	return c.configStore.Get(kind, key, namespace)
+	return conf
 }
 
 func (c *Controller) Create(config config.Config) (revision string, err error) {
@@ -166,6 +167,17 @@ func (c *Controller) Delete(kind config.GroupVersionKind, key, namespace string,
 	return errors.New("Delete failure: config" + key + "does not exist")
 }
 
+func (c *Controller) ListToConfigAppender(kind config.GroupVersionKind, namespace string, appender model.ConfigAppender) error {
+	confFilterFunc := func(conf *config.Config) bool {
+		return c.namespacesFilter == nil || c.namespacesFilter(conf)
+	}
+
+	filteredAppender := model.NewFilteredConfigAppender(appender,
+		model.ConfigFilterFunc(confFilterFunc))
+
+	return c.configStore.ListToConfigAppender(kind, namespace, filteredAppender)
+}
+
 func (c *Controller) List(kind config.GroupVersionKind, namespace string) ([]config.Config, error) {
 	configs, err := c.configStore.List(kind, namespace)
 	if err != nil {
@@ -174,7 +186,7 @@ func (c *Controller) List(kind config.GroupVersionKind, namespace string) ([]con
 	if c.namespacesFilter != nil {
 		var out []config.Config
 		for _, config := range configs {
-			if c.namespacesFilter(config) {
+			if c.namespacesFilter(&config) {
 				out = append(out, config)
 			}
 		}

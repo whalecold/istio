@@ -118,6 +118,10 @@ type Config struct {
 	// or type URLs.
 	InitialDiscoveryRequests []*discovery.DiscoveryRequest
 
+	// InitialDeltaDiscoveryRequests is a list of resources to watch at first, represented as URLs (for new XDS resource naming)
+	// or type URLs.
+	InitialDeltaDiscoveryRequests []*discovery.DeltaDiscoveryRequest
+
 	// BackoffPolicy determines the reconnect policy. Based on MCP client.
 	BackoffPolicy backoff.BackOff
 
