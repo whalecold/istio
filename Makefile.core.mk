@@ -370,7 +370,7 @@ ${TARGET_OUT}/release/_istioctl: ${LOCAL_OUT}/istioctl
 
 .PHONY: binaries-test
 binaries-test:
-	go test ${GOBUILDFLAGS} ./tests/binary/... -v --base-dir ${TARGET_OUT} --binaries="$(RELEASE_BINARIES)"
+	go test ${GOBUILDFLAGS} -coverprofile=coverage.out ./tests/binary/... -v --base-dir ${TARGET_OUT} --binaries="$(RELEASE_BINARIES)"
 
 # istioctl-all makes all of the non-static istioctl executables for each supported OS
 .PHONY: istioctl-all

@@ -391,6 +391,10 @@ func (fs *authzFakeStore) Get(_ config.GroupVersionKind, _, _ string) *config.Co
 	return nil
 }
 
+func (fs *authzFakeStore) ListToConfigAppender(typ config.GroupVersionKind, namespace string, appender ConfigAppender) error {
+	return nil
+}
+
 func (fs *authzFakeStore) List(typ config.GroupVersionKind, namespace string) ([]config.Config, error) {
 	var configs []config.Config
 	for _, data := range fs.data {

@@ -311,6 +311,7 @@ func (sd *ServiceDiscovery) InstancesByPort(svc *model.Service, port int, labels
 		return nil
 	}
 	key := fmt.Sprintf("%s:%d", string(svc.Hostname), port)
+	fmt.Printf("Hello %s\n", key)
 	instances, ok := sd.instancesByPortNum[key]
 	if !ok {
 		return nil

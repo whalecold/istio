@@ -80,6 +80,17 @@ func (s *KubeSource) Get(typ config.GroupVersionKind, name, namespace string) *c
 	return s.inner.Get(typ, name, namespace)
 }
 
+func (s *KubeSource) ListToConfigAppender(typ config.GroupVersionKind, namespace string, appender model.ConfigAppender) error {
+	confFilterFunc := func(c *config.Config) bool {
+		return s.namespacesFilter == nil || s.namespacesFilter(*c)
+	}
+
+	filteredAppender := model.NewFilteredConfigAppender(appender,
+		model.ConfigFilterFunc(confFilterFunc))
+
+	return s.inner.ListToConfigAppender(typ, namespace, filteredAppender)
+}
+
 func (s *KubeSource) List(typ config.GroupVersionKind, namespace string) ([]config.Config, error) {
 	configs, err := s.inner.List(typ, namespace)
 	if err != nil {
