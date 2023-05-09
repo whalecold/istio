@@ -127,7 +127,7 @@ func (s *DiscoveryServer) pushXds(con *Connection, w *model.WatchedResource, req
 			s.StatusReporter.RegisterEvent(con.conID, w.TypeUrl, req.Push.LedgerVersion)
 		}
 		if log.DebugEnabled() {
-			log.Debugf("%s: SKIP%s for node:%s%s", v3.GetShortType(w.TypeUrl), req.PushReason(), con.proxy.ID, info)
+			log.Debugf("%s: SKIP%s for node:%s%s, err %v", v3.GetShortType(w.TypeUrl), req.PushReason(), con.proxy.ID, info, err)
 		}
 
 		// If we are sending a request, we must respond or we can get Envoy stuck. Assert we do.

@@ -869,8 +869,10 @@ func (s *DiscoveryServer) startPush(req *model.PushRequest) {
 			log.Debugf("Starting new push while %v were still pending", currentlyPending)
 		}
 	}
+	clients := s.AllClients()
+	log.Infof("start push to all clients number %d", len(clients))
 	req.Start = time.Now()
-	for _, p := range s.AllClients() {
+	for _, p := range clients {
 		s.pushQueue.Enqueue(p, req)
 	}
 }
