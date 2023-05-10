@@ -211,7 +211,7 @@ func (s *stream) incrementalUpdateResource(gvk config.GroupVersionKind, msg *dis
 
 func (s *stream) handleDeltaDiscoveryResponse(msg *discovery.DeltaDiscoveryResponse) {
 	adscLog.Info("Received ", s.url, " type ", msg.TypeUrl,
-		" cnt=", len(msg.Resources), " nonce=", msg.Nonce)
+		" updated cnt=", len(msg.Resources), " removed cnt=", len(msg.RemovedResources), " nonce=", msg.Nonce)
 	metrics.MCPOverXDSClientReceiveResponseTotal.WithLabelValues(s.upstreamName, s.nodeID, msg.TypeUrl).Inc()
 	now := time.Now()
 	defer func() {
