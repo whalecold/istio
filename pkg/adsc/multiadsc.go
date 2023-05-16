@@ -173,5 +173,10 @@ func (ma *MultiADSC) OnServersUpdate(servers []*mcpdiscovery.McpServer) error {
 			}
 		}()
 	}
+
+	if len(errors) == 0 {
+		ma.store.Initialized()
+	}
+
 	return utilserrors.NewAggregate(errors)
 }
