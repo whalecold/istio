@@ -27,6 +27,7 @@ const (
 	EndpointType               = resource.EndpointType
 	ListenerType               = resource.ListenerType
 	RouteType                  = resource.RouteType
+	VirtualHostType            = resource.VirtualHostType
 	SecretType                 = resource.SecretType
 	ExtensionConfigurationType = resource.ExtensionConfigType
 
@@ -60,6 +61,8 @@ func GetShortType(typeURL string) string {
 		return "PCDS"
 	case ExtensionConfigurationType:
 		return "ECDS"
+	case VirtualHostType:
+		return "VHDS"
 	default:
 		return typeURL
 	}
