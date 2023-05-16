@@ -329,19 +329,6 @@ func (configgen *ConfigGeneratorImpl) buildGatewayHTTPRouteConfig(node *model.Pr
 			ValidateClusters: proto.BoolFalse,
 		}
 	}
-	return &route.RouteConfiguration{
-		Name:         routeName,
-		VirtualHosts: []*route.VirtualHost{},
-		Vhds: &route.Vhds{
-			ConfigSource: &core.ConfigSource{
-				ConfigSourceSpecifier: &core.ConfigSource_Ads{
-					Ads: &core.AggregatedConfigSource{},
-				},
-			},
-		},
-		ValidateClusters: proto.BoolFalse,
-	}
-
 	merged := node.MergedGateway
 	log.Debugf("buildGatewayRoutes: gateways after merging: %v", merged)
 

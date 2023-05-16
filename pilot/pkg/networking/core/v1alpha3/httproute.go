@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -178,21 +179,21 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 		}
 	}
 	if !cacheHit {
-		virtualHosts, resource, routeCache = BuildSidecarOutboundVirtualHosts(node, req.Push, routeName, listenerPort, efKeys, configgen.Cache)
-		if resource != nil {
-			return resource, true
-		}
-		if listenerPort > 0 {
-			// only cache for tcp ports and not for uds
-			vHostCache[listenerPort] = virtualHosts
-		}
+		//virtualHosts, resource, routeCache = BuildSidecarOutboundVirtualHosts(node, req.Push, routeName, listenerPort, efKeys, configgen.Cache)
+		//if resource != nil {
+		//	return resource, true
+		//}
+		//if listenerPort > 0 {
+		//	// only cache for tcp ports and not for uds
+		//	vHostCache[listenerPort] = virtualHosts
+		//}
 
-		// FIXME: This will ignore virtual services with hostnames that do not match any service in the registry
-		// per api spec, these hostnames + routes should appear in the virtual hosts (think bookinfo.com and
-		// productpage.ns1.svc.cluster.local). See the TODO in BuildSidecarOutboundVirtualHosts for the right solution
-		if useSniffing {
-			virtualHosts = getVirtualHostsForSniffedServicePort(virtualHosts, routeName)
-		}
+		//// FIXME: This will ignore virtual services with hostnames that do not match any service in the registry
+		//// per api spec, these hostnames + routes should appear in the virtual hosts (think bookinfo.com and
+		//// productpage.ns1.svc.cluster.local). See the TODO in BuildSidecarOutboundVirtualHosts for the right solution
+		//if useSniffing {
+		//	virtualHosts = getVirtualHostsForSniffedServicePort(virtualHosts, routeName)
+		//}
 	}
 
 	util.SortVirtualHosts(virtualHosts)
@@ -202,10 +203,18 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 	}
 
 	out := &route.RouteConfiguration{
-		Name:             routeName,
-		VirtualHosts:     virtualHosts,
+		Name:         routeName,
+		VirtualHosts: virtualHosts,
+		Vhds: &route.Vhds{
+			ConfigSource: &core.ConfigSource{
+				ConfigSourceSpecifier: &core.ConfigSource_Ads{
+					Ads: &core.AggregatedConfigSource{},
+				},
+			},
+		},
 		ValidateClusters: proto.BoolFalse,
 	}
+
 	if SidecarIgnorePort(node) {
 		out.IgnorePortInHostMatching = true
 	}
