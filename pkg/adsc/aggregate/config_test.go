@@ -39,6 +39,9 @@ func TestAggregateStoreScheme(t *testing.T) {
 	controller2 := memory.NewController(store2)
 
 	store := MakeCache(collection.Schemas{})
+
+	g.Expect(store.HasSynced()).To(gomega.BeFalse())
+
 	store.AddStore("c1", controller1)
 	store.AddStore("c2", controller2)
 
@@ -51,6 +54,10 @@ func TestAggregateStoreScheme(t *testing.T) {
 	schemas = store.Schemas()
 	g.Expect(schemas.All()).To(gomega.HaveLen(1))
 	fixtures.ExpectEqual(t, schemas, collection.SchemasFor(schema2))
+
+	g.Expect(store.HasSynced()).To(gomega.BeFalse())
+	store.Initialized()
+	g.Expect(store.HasSynced()).To(gomega.BeTrue())
 }
 
 func TestAggregateStoreGetAndRemove(t *testing.T) {
