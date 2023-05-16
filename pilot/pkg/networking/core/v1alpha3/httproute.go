@@ -202,6 +202,7 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 		virtualHosts = append(virtualHosts, buildCatchAllVirtualHost(node))
 	}
 
+	fmt.Printf("vhds route name test ... %v", routeName)
 	out := &route.RouteConfiguration{
 		Name:         routeName,
 		VirtualHosts: virtualHosts,
