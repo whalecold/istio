@@ -208,8 +208,19 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 		VirtualHosts: virtualHosts,
 		Vhds: &route.Vhds{
 			ConfigSource: &core.ConfigSource{
-				ConfigSourceSpecifier: &core.ConfigSource_Ads{
-					Ads: &core.AggregatedConfigSource{},
+				ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
+					ApiConfigSource: &core.ApiConfigSource{
+						ApiType: core.ApiConfigSource_DELTA_GRPC,
+						GrpcServices: []*core.GrpcService{
+							{
+								TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
+									EnvoyGrpc: &core.GrpcService_EnvoyGrpc{
+										ClusterName: "xds-grpc",
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
