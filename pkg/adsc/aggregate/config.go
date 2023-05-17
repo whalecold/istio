@@ -33,7 +33,7 @@ type ConfigStoreCache interface {
 	model.ConfigStoreController
 	AddStore(string, model.ConfigStoreController)
 	RemoveStore(string)
-	// The cache can add/remove stores dynamically, the first check can return true if the cache is
+	// The cache can add/remove stores dynamically, the first check will return true if the cache is
 	// empty but not initialized. Use Initialized function to manually control whether the cache is synchronized.
 	Initialized()
 }
@@ -82,7 +82,7 @@ func MakeCache(defaultScheme collection.Schemas) ConfigStoreCache {
 
 // Initialized set the initialized flag.
 func (cr *store) Initialized() {
-	cr.initialized.CompareAndSwap(false, true)
+	cr.initialized.Store(true)
 }
 
 // AddStore add store dynamically. Overwrite the old store which has the same name, should clean the
