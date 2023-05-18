@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/go-multierror"
+	"go.uber.org/atomic"
 	"k8s.io/client-go/tools/cache"
 
 	"istio.io/istio/pilot/pkg/model"
@@ -32,6 +33,9 @@ type ConfigStoreCache interface {
 	model.ConfigStoreController
 	AddStore(string, model.ConfigStoreController)
 	RemoveStore(string)
+	// The cache can add/remove stores dynamically, the first check will return true if the cache is
+	// empty but not initialized. Use Initialized function to manually control whether the cache is synchronized.
+	Initialized()
 }
 
 type eventHandler struct {
@@ -60,18 +64,25 @@ type store struct {
 	// invoking of function SetWatchErrorHandler.
 	errorHandlers []func(r *cache.Reflector, err error)
 
-	lock sync.RWMutex
+	lock        sync.RWMutex
+	initialized *atomic.Bool
 }
 
 // MakeCache creates an aggregate config store cache. Could add or remove several config store cache dynamically.
 func MakeCache(defaultScheme collection.Schemas) ConfigStoreCache {
 	s := &store{
-		stores: map[config.GroupVersionKind]map[string]model.ConfigStore{},
-		caches: map[string]model.ConfigStoreController{},
+		stores:      map[config.GroupVersionKind]map[string]model.ConfigStore{},
+		caches:      map[string]model.ConfigStoreController{},
+		initialized: atomic.NewBool(false),
 	}
 	s.defaultScheme = defaultScheme
 	s.rebuildScheme()
 	return s
+}
+
+// Initialized set the initialized flag.
+func (cr *store) Initialized() {
+	cr.initialized.Store(true)
 }
 
 // AddStore add store dynamically. Overwrite the old store which has the same name, should clean the
@@ -248,8 +259,13 @@ func (cr *store) Patch(orig config.Config, patchFn config.PatchFunc) (string, er
 // HasSynced the arregate should always true as the store in it can
 // be removed or added dynamically.
 func (cr *store) HasSynced() bool {
+	if !cr.initialized.Load() {
+		return false
+	}
+
 	cr.lock.Lock()
 	defer cr.lock.Unlock()
+
 	for _, s := range cr.caches {
 		if !s.HasSynced() {
 			return false
