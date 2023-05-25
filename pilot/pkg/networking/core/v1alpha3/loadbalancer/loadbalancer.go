@@ -16,6 +16,7 @@
 package loadbalancer
 
 import (
+	"fmt"
 	"math"
 	"sort"
 
@@ -75,6 +76,7 @@ func ApplyLocalityLBSetting(
 		// Failover needs outlier detection, otherwise Envoy will never drop down to a lower priority.
 		// Do not apply default failover when locality LB is disabled.
 	} else if enableFailover && (localityLB.Enabled == nil || localityLB.Enabled.Value) {
+		fmt.Printf("eds debug config: FailoverPriority %v\n", localityLB.FailoverPriority)
 		if len(localityLB.FailoverPriority) > 0 {
 			applyPriorityFailover(loadAssignment, wrappedLocalityLbEndpoints, proxyLabels, localityLB.FailoverPriority)
 			return
@@ -149,6 +151,7 @@ func applyLocalityFailover(
 	loadAssignment *endpoint.ClusterLoadAssignment,
 	failover []*v1alpha3.LocalityLoadBalancerSetting_Failover,
 ) {
+	fmt.Printf("eds debug config: locality info zone %v region %v \n", locality.Zone, locality.Region)
 	// key is priority, value is the index of the LocalityLbEndpoints in ClusterLoadAssignment
 	priorityMap := map[int][]int{}
 
@@ -158,6 +161,7 @@ func applyLocalityFailover(
 		// if region/zone match, the priority is 1.
 		// if region matches, the priority is 2.
 		// if locality not match, the priority is 3.
+		fmt.Printf("eds debug config: locality info zone %v region %v \n", localityEndpoint.Locality.Zone, localityEndpoint.Locality.Region)
 		priority := util.LbPriority(locality, localityEndpoint.Locality)
 		// region not match, apply failover settings when specified
 		// update localityLbEndpoints' priority to 4 if failover not match
@@ -174,6 +178,7 @@ func applyLocalityFailover(
 		loadAssignment.Endpoints[i].Priority = uint32(priority)
 		priorityMap[priority] = append(priorityMap[priority], i)
 	}
+	fmt.Printf("eds debug config: locality info priortiyMap %v \n", priorityMap)
 
 	// since Priorities should range from 0 (highest) to N (lowest) without skipping.
 	// 2. adjust the priorities in order

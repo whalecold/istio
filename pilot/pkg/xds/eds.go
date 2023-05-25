@@ -32,7 +32,10 @@ import (
 	"istio.io/istio/pkg/config/protocol"
 	"istio.io/istio/pkg/config/schema/kind"
 	"istio.io/istio/pkg/util/sets"
+	"istio.io/pkg/log"
 )
+
+var edsLog = log.RegisterScope("eds debug config", "eds  debugging", 0)
 
 // PushType is an enumeration that decides what type push we should do when we get EDS update.
 type PushType int
@@ -339,6 +342,7 @@ func (s *DiscoveryServer) generateEndpoints(b EndpointBuilder) *endpoint.Cluster
 				LocalityLbEndpoints: l.Endpoints[i],
 			}
 		}
+		edsLog.Infof("endpoint %v", b.clusterName)
 		loadbalancer.ApplyLocalityLBSetting(l, wrappedLocalityLbEndpoints, b.locality, b.proxy.Labels, lbSetting, enableFailover)
 	}
 	return l
