@@ -27,6 +27,7 @@ const (
 	EndpointType               = resource.EndpointType
 	ListenerType               = resource.ListenerType
 	RouteType                  = resource.RouteType
+	VirtualHostType            = resource.VirtualHostType
 	SecretType                 = resource.SecretType
 	ExtensionConfigurationType = resource.ExtensionConfigType
 
@@ -50,6 +51,8 @@ func GetShortType(typeURL string) string {
 		return "LDS"
 	case RouteType:
 		return "RDS"
+	case VirtualHostType:
+		return "VHDS"
 	case EndpointType:
 		return "EDS"
 	case SecretType:
@@ -74,6 +77,8 @@ func GetMetricType(typeURL string) string {
 		return "lds"
 	case RouteType:
 		return "rds"
+	case VirtualHostType:
+		return "vhds"
 	case EndpointType:
 		return "eds"
 	case SecretType:
@@ -101,6 +106,8 @@ func GetResourceType(shortType string) string {
 		return ListenerType
 	case "RDS":
 		return RouteType
+	case "VHDS":
+		return VirtualHostType
 	case "EDS":
 		return EndpointType
 	case "SDS":

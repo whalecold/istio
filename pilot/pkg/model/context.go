@@ -257,6 +257,9 @@ type Proxy struct {
 	// where the proxy and service instances reside may have more than one IP address
 	IPAddresses []string
 
+	// OnDemandEnable ...
+	OnDemandEnable bool
+
 	// ID is the unique platform-specific sidecar proxy ID. For k8s it is the pod ID and
 	// namespace <podName.namespace>.
 	ID string
@@ -960,6 +963,11 @@ func ParseServiceNodeWithMetadata(nodeID string, metadata *NodeMetadata) (*Proxy
 
 	if len(parts) != 4 {
 		return out, fmt.Errorf("missing parts in the service node %q", nodeID)
+	}
+
+	if metadata.ProxyConfig != nil && metadata.ProxyConfig.ProxyMetadata != nil &&
+		metadata.ProxyConfig.ProxyMetadata["ISTIO_ON_DEMAND"] == "true" {
+		out.OnDemandEnable = true
 	}
 
 	if !IsApplicationNodeType(NodeType(parts[0])) {

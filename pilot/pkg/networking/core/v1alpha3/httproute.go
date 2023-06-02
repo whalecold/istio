@@ -21,8 +21,10 @@ import (
 	"strconv"
 	"strings"
 
+	v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	duration "github.com/golang/protobuf/ptypes/duration"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	networking "istio.io/api/networking/v1alpha3"
@@ -127,6 +129,59 @@ func buildSidecarInboundHTTPRouteConfig(lb *ListenerBuilder, cc inboundChainConf
 	return r
 }
 
+// buildSidecarOutboundVirtualHosts builds an outbound HTTP Route for sidecar.
+// Based on port, will determine all virtual hosts that listen on the port.
+func (configgen *ConfigGeneratorImpl) buildSidecarOutboundVirtualHosts(
+	node *model.Proxy,
+	req *model.PushRequest,
+	resourceName string,
+	vHostCache map[int][]*route.VirtualHost,
+	efw *model.EnvoyFilterWrapper,
+	efKeys []string,
+) (*discovery.Resource, bool) {
+
+	index := strings.IndexRune(resourceName, '/')
+	if index != -1 {
+		// TODO should return nil or error ?
+	}
+
+	virtualDomain := resourceName[index+1:]
+	listenerPort, err := strconv.Atoi(resourceName[:index])
+	if err != nil {
+		// we have a port whose name is http_proxy or unix:///foo/bar
+		// check for both.
+		if resourceName != model.RDSHttpProxy && !strings.HasPrefix(resourceName, model.UnixAddressPrefix) {
+			// TODO: This is potentially one place where envoyFilter ADD operation can be helpful if the
+			// user wants to ship a custom RDS. But at this point, the match semantics are murky. We have no
+			// object to match upon. This needs more thought. For now, we will continue to return nil for
+			// unknown routes
+			return nil, false
+		}
+	}
+
+	vhosts, _, _ := BuildSidecarOutboundVirtualHosts(node, req.Push, resourceName[:index], listenerPort, efKeys, nil)
+
+	var virtualHost *route.VirtualHost
+	for _, vh := range vhosts {
+		for _, domain := range vh.Domains {
+			if domain == virtualDomain {
+				virtualHost = vh
+				break
+			}
+		}
+	}
+	// TODO if  virtualHosts is empty, use default policy.
+
+	// apply envoy filter patches
+	//out = envoyfilter.ApplyRouteConfigurationPatches(networking.EnvoyFilter_SIDECAR_OUTBOUND, node, efw, out)
+
+	resource := &discovery.Resource{
+		Name:     resourceName,
+		Resource: protoconv.MessageToAny(virtualHost),
+	}
+	return resource, false
+}
+
 // buildSidecarOutboundHTTPRouteConfig builds an outbound HTTP Route for sidecar.
 // Based on port, will determine all virtual hosts that listen on the port.
 func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
@@ -203,8 +258,22 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 
 	out := &route.RouteConfiguration{
 		Name:             routeName,
-		VirtualHosts:     virtualHosts,
 		ValidateClusters: proto.BoolFalse,
+	}
+	if node.OnDemandEnable {
+		out.Vhds = &route.Vhds{
+			ConfigSource: &v3.ConfigSource{
+				InitialFetchTimeout: &duration.Duration{
+					Seconds: 10,
+				},
+				ConfigSourceSpecifier: &v3.ConfigSource_Ads{
+					Ads: &v3.AggregatedConfigSource{},
+				},
+			},
+		}
+	} else {
+		out.VirtualHosts = virtualHosts
+
 	}
 	if SidecarIgnorePort(node) {
 		out.IgnorePortInHostMatching = true

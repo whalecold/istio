@@ -477,7 +477,7 @@ func shouldUnsubscribe(request *discovery.DiscoveryRequest) bool {
 // resource names.
 func isWildcardTypeURL(typeURL string) bool {
 	switch typeURL {
-	case v3.SecretType, v3.EndpointType, v3.RouteType, v3.ExtensionConfigurationType:
+	case v3.SecretType, v3.EndpointType, v3.RouteType, v3.VirtualHostType, v3.ExtensionConfigurationType:
 		// By XDS spec, these are not wildcard
 		return false
 	case v3.ClusterType, v3.ListenerType:
@@ -769,15 +769,17 @@ func (s *DiscoveryServer) pushConnection(con *Connection, pushEv *Event) error {
 
 // PushOrder defines the order that updates will be pushed in. Any types not listed here will be pushed in random
 // order after the types listed here
-var PushOrder = []string{v3.ClusterType, v3.EndpointType, v3.ListenerType, v3.RouteType, v3.SecretType}
+// https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol#eventual-consistency-considerations
+var PushOrder = []string{v3.ClusterType, v3.EndpointType, v3.ListenerType, v3.RouteType, v3.VirtualHostType, v3.SecretType}
 
 // KnownOrderedTypeUrls has typeUrls for which we know the order of push.
 var KnownOrderedTypeUrls = map[string]struct{}{
-	v3.ClusterType:  {},
-	v3.EndpointType: {},
-	v3.ListenerType: {},
-	v3.RouteType:    {},
-	v3.SecretType:   {},
+	v3.ClusterType:     {},
+	v3.EndpointType:    {},
+	v3.ListenerType:    {},
+	v3.RouteType:       {},
+	v3.VirtualHostType: {},
+	v3.SecretType:      {},
 }
 
 func reportAllEvents(s DistributionStatusCache, id, version string, ignored sets.String) {

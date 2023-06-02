@@ -59,6 +59,13 @@ var (
 		monitoring.WithLabels(nodeTag, errTag),
 	)
 
+	// pilot_total_xds_rejects should be used instead. This is for backwards compatibility
+	vhdsReject = monitoring.NewGauge(
+		"pilot_xds_vhds_reject",
+		"Pilot rejected VHDS.",
+		monitoring.WithLabels(nodeTag, errTag),
+	)
+
 	totalXDSRejects = monitoring.NewSum(
 		"pilot_total_xds_rejects",
 		"Total number of XDS responses from pilot rejected by proxy.",
@@ -98,10 +105,11 @@ var (
 		monitoring.WithLabels(typeTag),
 	)
 
-	cdsSendErrPushes = pushes.With(typeTag.Value("cds_senderr"))
-	edsSendErrPushes = pushes.With(typeTag.Value("eds_senderr"))
-	ldsSendErrPushes = pushes.With(typeTag.Value("lds_senderr"))
-	rdsSendErrPushes = pushes.With(typeTag.Value("rds_senderr"))
+	cdsSendErrPushes  = pushes.With(typeTag.Value("cds_senderr"))
+	edsSendErrPushes  = pushes.With(typeTag.Value("eds_senderr"))
+	ldsSendErrPushes  = pushes.With(typeTag.Value("lds_senderr"))
+	rdsSendErrPushes  = pushes.With(typeTag.Value("rds_senderr"))
+	vhdsSendErrPushes = pushes.With(typeTag.Value("vhds_senderr"))
 
 	debounceTime = monitoring.NewDistribution(
 		"pilot_debounce_time",
@@ -240,6 +248,8 @@ func recordSendError(xdsType string, err error) bool {
 			edsSendErrPushes.Increment()
 		case v3.RouteType:
 			rdsSendErrPushes.Increment()
+		case v3.VirtualHostType:
+			vhdsSendErrPushes.Increment()
 		}
 		return true
 	}
@@ -257,6 +267,9 @@ func incrementXDSRejects(xdsType string, node, errCode string) {
 		edsReject.With(nodeTag.Value(node), errTag.Value(errCode)).Increment()
 	case v3.RouteType:
 		rdsReject.With(nodeTag.Value(node), errTag.Value(errCode)).Increment()
+	case v3.VirtualHostType:
+		vhdsReject.With(nodeTag.Value(node), errTag.Value(errCode)).Increment()
+
 	}
 }
 
@@ -275,6 +288,7 @@ func init() {
 		edsReject,
 		ldsReject,
 		rdsReject,
+		vhdsReject,
 		xdsExpiredNonce,
 		totalXDSRejects,
 		monServices,
