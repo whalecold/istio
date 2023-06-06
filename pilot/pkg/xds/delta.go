@@ -22,6 +22,7 @@ import (
 	"time"
 
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	"github.com/envoyproxy/go-control-plane/pkg/resource/v3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
@@ -171,6 +172,10 @@ func (s *DiscoveryServer) pushConnectionDelta(con *Connection, pushEv *Event) er
 	// Each Generator is responsible for determining if the push event requires a push
 	wrl, ignoreEvents := con.pushDetails()
 	for _, w := range wrl {
+		if w.TypeUrl == resource.VirtualHostType {
+			deltaLog.Debugf("ignore push vhds %v", con.conID)
+			continue
+		}
 		if err := s.pushDeltaXds(con, w, pushRequest); err != nil {
 			return err
 		}

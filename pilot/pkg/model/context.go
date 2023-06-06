@@ -965,9 +965,11 @@ func ParseServiceNodeWithMetadata(nodeID string, metadata *NodeMetadata) (*Proxy
 		return out, fmt.Errorf("missing parts in the service node %q", nodeID)
 	}
 
+	fmt.Printf("test node id %v \n", nodeID)
 	if metadata.ProxyConfig != nil && metadata.ProxyConfig.ProxyMetadata != nil &&
 		metadata.ProxyConfig.ProxyMetadata["ISTIO_ON_DEMAND"] == "true" {
 		out.OnDemandEnable = true
+		fmt.Printf("test node id %v enable ondemand......\n", nodeID)
 	}
 
 	if !IsApplicationNodeType(NodeType(parts[0])) {

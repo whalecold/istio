@@ -24,7 +24,6 @@ import (
 	v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	duration "github.com/golang/protobuf/ptypes/duration"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	networking "istio.io/api/networking/v1alpha3"
@@ -260,21 +259,22 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 		Name:             routeName,
 		ValidateClusters: proto.BoolFalse,
 	}
+
+	fmt.Printf("test node id generate rds %v, on demand enable %v\n", node.ID, node.OnDemandEnable)
 	if node.OnDemandEnable {
+		fmt.Printf("test node id generate rds %v use vhds\n", node.ID)
 		out.Vhds = &route.Vhds{
 			ConfigSource: &v3.ConfigSource{
-				InitialFetchTimeout: &duration.Duration{
-					Seconds: 10,
-				},
 				ConfigSourceSpecifier: &v3.ConfigSource_Ads{
 					Ads: &v3.AggregatedConfigSource{},
 				},
 			},
 		}
 	} else {
+		fmt.Printf("test node id generate rds %v not use vhds\n", node.ID)
 		out.VirtualHosts = virtualHosts
-
 	}
+
 	if SidecarIgnorePort(node) {
 		out.IgnorePortInHostMatching = true
 	}
