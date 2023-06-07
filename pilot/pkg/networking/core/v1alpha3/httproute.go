@@ -268,6 +268,7 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 				ConfigSourceSpecifier: &v3.ConfigSource_Ads{
 					Ads: &v3.AggregatedConfigSource{},
 				},
+				ResourceApiVersion: v3.ApiVersion_V3,
 			},
 		}
 	} else {
