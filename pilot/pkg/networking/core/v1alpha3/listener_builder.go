@@ -403,6 +403,7 @@ func (lb *ListenerBuilder) buildHTTPConnectionManager(httpOpts *httpListenerOpts
 	// TypedPerFilterConfig in route needs these filters.
 	filters = append(filters, xdsfilters.Fault, xdsfilters.Cors)
 	filters = append(filters, lb.push.Telemetry.HTTPFilters(lb.node, httpOpts.class)...)
+	filters = append(filters, xdsfilters.BuildOnDemandFilter())
 	filters = append(filters, xdsfilters.BuildRouterFilter(routerFilterCtx))
 
 	connectionManager.HttpFilters = filters

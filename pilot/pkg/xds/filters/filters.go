@@ -23,6 +23,7 @@ import (
 	fault "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/fault/v3"
 	grpcstats "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/grpc_stats/v3"
 	grpcweb "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/grpc_web/v3"
+	ondemand "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/on_demand/v3"
 	router "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/router/v3"
 	httpwasm "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/wasm/v3"
 	httpinspector "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/listener/http_inspector/v3"
@@ -206,6 +207,23 @@ func BuildRouterFilter(ctx *RouterFilterContext) *hcm.HttpFilter {
 		ConfigType: &hcm.HttpFilter_TypedConfig{
 			TypedConfig: protoconv.MessageToAny(&router.Router{
 				StartChildSpan: ctx.StartChildSpan,
+			}),
+		},
+	}
+}
+
+func BuildOnDemandFilter() *hcm.HttpFilter {
+	return &hcm.HttpFilter{
+		Name: "envoy.filters.http.on_demand",
+		ConfigType: &hcm.HttpFilter_TypedConfig{
+			TypedConfig: protoconv.MessageToAny(&ondemand.OnDemand{
+				Odcds: &ondemand.OnDemandCds{
+					Source: &core.ConfigSource{
+						ConfigSourceSpecifier: &core.ConfigSource_Ads{
+							Ads: &core.AggregatedConfigSource{},
+						},
+					},
+				},
 			}),
 		},
 	}
