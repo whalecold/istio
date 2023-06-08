@@ -24,9 +24,7 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 		for _, vhdsName := range virtualHostNames {
 			vhds, _ := configgen.buildSidecarOutboundVirtualHosts(node, req, vhdsName, nil, efw, envoyfilterKeys)
 			if vhds == nil {
-				vhds = &discovery.Resource{
-					Name: vhdsName,
-				}
+				continue
 			}
 			vhdsConfigurations = append(vhdsConfigurations, vhds)
 		}
