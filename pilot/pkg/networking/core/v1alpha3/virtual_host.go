@@ -103,19 +103,18 @@ func buildSidecarOutboundVirtualHosts(
 
 // parseVirtualHostResourceName the format is routeName/domain:routeName
 func parseVirtualHostResourceName(resourceName string) (int, string, string, error) {
-	err := fmt.Errorf("invalid format resource name %s", resourceName)
 	first := strings.IndexRune(resourceName, '/')
 	if first == -1 {
-		return 0, "", "", err
+		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
 	}
 	routeName := resourceName[:first]
 	last := strings.Index(resourceName, ":"+routeName)
-	if last != -1 || first+1 >= last {
-		return 0, "", "", err
+	if last == -1 || first+1 >= last {
+		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
 	}
 	port, err := strconv.Atoi(routeName)
 	if err != nil {
-		return 0, "", "", err
+		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
 	}
 	// port vhdsName domain
 	return port, resourceName[first+1:], resourceName[first+1 : last], nil
