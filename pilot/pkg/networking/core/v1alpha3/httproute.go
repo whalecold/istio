@@ -15,7 +15,6 @@
 package v1alpha3
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"sort"
@@ -25,7 +24,6 @@ import (
 	v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	duration "github.com/golang/protobuf/ptypes/duration"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	networking "istio.io/api/networking/v1alpha3"
@@ -130,101 +128,6 @@ func buildSidecarInboundHTTPRouteConfig(lb *ListenerBuilder, cc inboundChainConf
 	return r
 }
 
-// buildSidecarOutboundVirtualHosts builds an outbound HTTP Route for sidecar.
-// Based on port, will determine all virtual hosts that listen on the port.
-func (configgen *ConfigGeneratorImpl) buildSidecarOutboundVirtualHosts(
-	node *model.Proxy,
-	req *model.PushRequest,
-	resourceName string,
-	vHostCache map[int][]*route.VirtualHost,
-	efw *model.EnvoyFilterWrapper,
-	efKeys []string,
-) (*discovery.Resource, bool) {
-
-	fmt.Printf("resourceName %v, error \n", resourceName)
-	index := strings.IndexRune(resourceName, '/')
-	if index == -1 {
-		fmt.Printf("resourceName %v, error \n", resourceName)
-		// TODO should return nil or error ?
-		return nil, false
-	}
-
-	virtualDomain := resourceName[index+1:]
-	listenerPort, err := strconv.Atoi(resourceName[:index])
-	lindex := strings.Index(resourceName, ":"+resourceName[:index])
-	if lindex != -1 {
-		fmt.Printf("lindex  %v, error \n", lindex)
-		virtualDomain = resourceName[index+1 : lindex]
-	}
-	if err != nil {
-		// we have a port whose name is http_proxy or unix:///foo/bar
-		// check for both.
-		if resourceName != model.RDSHttpProxy && !strings.HasPrefix(resourceName, model.UnixAddressPrefix) {
-			// TODO: This is potentially one place where envoyFilter ADD operation can be helpful if the
-			// user wants to ship a custom RDS. But at this point, the match semantics are murky. We have no
-			// object to match upon. This needs more thought. For now, we will continue to return nil for
-			// unknown routes
-			return nil, false
-		}
-	}
-	fmt.Printf("routeName name %v, listenport %v \n", resourceName[:index], listenerPort)
-	vhosts, _, _ := BuildSidecarOutboundVirtualHosts(node, req.Push, resourceName[:index], listenerPort, efKeys, nil)
-
-	out, _ := json.Marshal(vhosts)
-	fmt.Printf("routeName name %v, listenport %v length vhosts %v\n", resourceName[:index], listenerPort, string(out))
-	var virtualHost *route.VirtualHost
-	for _, vh := range vhosts {
-		fmt.Printf("find one routeName name , vhdomain %v length vhosts %v ------------ name %v\n", virtualDomain, vh.Domains, vh.Name)
-		for _, domain := range vh.Domains {
-			if domain == virtualDomain {
-				virtualHost = vh
-				break
-			}
-		}
-	}
-	if virtualHost == nil {
-		// build default policy.
-		virtualHost = &route.VirtualHost{
-			Name:    resourceName[index+1:],
-			Domains: []string{virtualDomain, resourceName[index+1:]},
-			Routes: []*route.Route{
-				{
-					Name: virtualDomain,
-					Match: &route.RouteMatch{
-						PathSpecifier: &route.RouteMatch_Prefix{
-							Prefix: "/",
-						},
-					},
-					Action: &route.Route_Route{
-						Route: &route.RouteAction{
-							ClusterSpecifier: &route.RouteAction_Cluster{
-								Cluster: "PassthroughCluster",
-							},
-							Timeout: &duration.Duration{
-								Seconds: 0,
-							},
-							MaxGrpcTimeout: &duration.Duration{
-								Seconds: 0,
-							},
-						},
-					},
-				},
-			},
-			IncludeRequestAttemptCount: true,
-		}
-	}
-	// TODO if  virtualHosts is empty, use default policy.
-
-	// apply envoy filter patches
-	//out = envoyfilter.ApplyRouteConfigurationPatches(networking.EnvoyFilter_SIDECAR_OUTBOUND, node, efw, out)
-
-	resource := &discovery.Resource{
-		Name:     resourceName,
-		Resource: protoconv.MessageToAny(virtualHost),
-	}
-	return resource, false
-}
-
 // buildSidecarOutboundHTTPRouteConfig builds an outbound HTTP Route for sidecar.
 // Based on port, will determine all virtual hosts that listen on the port.
 func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
@@ -304,9 +207,7 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 		ValidateClusters: proto.BoolFalse,
 	}
 
-	fmt.Printf("test node id generate rds %v, on demand enable %v\n", node.ID, node.OnDemandEnable)
 	if node.OnDemandEnable {
-		fmt.Printf("test node id generate rds %v use vhds\n", node.ID)
 		out.Vhds = &route.Vhds{
 			ConfigSource: &v3.ConfigSource{
 				ConfigSourceSpecifier: &v3.ConfigSource_Ads{
@@ -316,7 +217,6 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 			},
 		}
 	} else {
-		fmt.Printf("test node id generate rds %v not use vhds\n", node.ID)
 		out.VirtualHosts = virtualHosts
 	}
 

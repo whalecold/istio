@@ -656,6 +656,9 @@ type NodeMetadata struct {
 	// The istiod address when running ASM Managed Control Plane.
 	CloudrunAddr string `json:"CLOUDRUN_ADDR,omitempty"`
 
+	// OnDemandXds ...
+	OnDemandXds bool `json:"ON_DEMAND_XDS,omitempty"`
+
 	// Contains a copy of the raw metadata. This is needed to lookup arbitrary values.
 	// If a value is known ahead of time it should be added to the struct rather than reading from here,
 	Raw map[string]any `json:"-"`
@@ -965,12 +968,13 @@ func ParseServiceNodeWithMetadata(nodeID string, metadata *NodeMetadata) (*Proxy
 		return out, fmt.Errorf("missing parts in the service node %q", nodeID)
 	}
 
-	fmt.Printf("test node id %v \n", nodeID)
-	if metadata.ProxyConfig != nil && metadata.ProxyConfig.ProxyMetadata != nil &&
-		metadata.ProxyConfig.ProxyMetadata["ISTIO_ON_DEMAND"] == "true" {
-		out.OnDemandEnable = true
-		fmt.Printf("test node id %v enable ondemand......\n", nodeID)
-	}
+	//fmt.Printf("test node id %v \n", nodeID)
+	//if metadata.ProxyConfig != nil && metadata.ProxyConfig.ProxyMetadata != nil &&
+	//	metadata.ProxyConfig.ProxyMetadata["ISTIO_ON_DEMAND"] == "true" {
+	//	out.OnDemandEnable = true
+	//	fmt.Printf("test node id %v enable ondemand......\n", nodeID)
+	//}
+	out.OnDemandEnable = metadata.OnDemandXds
 
 	if !IsApplicationNodeType(NodeType(parts[0])) {
 		return out, fmt.Errorf("invalid node type (valid types: sidecar, router in the service node %q", nodeID)

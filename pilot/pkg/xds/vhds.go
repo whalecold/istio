@@ -24,7 +24,6 @@ func (vhds *VhdsGenerator) GenerateDeltas(proxy *model.Proxy, req *model.PushReq
 		return nil, nil, model.DefaultXdsLogDetails, true, nil
 	}
 	resources, logDetails := vhds.Server.ConfigGenerator.BuildVirtualHosts(proxy, req, w.ResourceNames)
-	deltaLog.Debugf("vhds test... %d", len(resources))
 	return resources, nil, logDetails, true, nil
 }
 
