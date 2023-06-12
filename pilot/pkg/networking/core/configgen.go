@@ -44,7 +44,7 @@ type ConfigGenerator interface {
 	BuildHTTPRoutes(node *model.Proxy, req *model.PushRequest, routeNames []string) ([]*discovery.Resource, model.XdsLogDetails)
 
 	// BuildVirtualHosts returns the list of VirtualHost for the given proxy HTTP routes. This is the VHDS output
-	BuildVirtualHosts(node *model.Proxy, req *model.PushRequest, virtualHostNames []string) ([]*discovery.Resource, model.XdsLogDetails)
+	BuildVirtualHosts(node *model.Proxy, req *model.PushRequest, virtualHostNames []string) ([]*discovery.Resource, model.DeletedResources, model.XdsLogDetails)
 
 	// BuildNameTable returns list of hostnames and the associated IPs
 	BuildNameTable(node *model.Proxy, push *model.PushContext) *dnsProto.NameTable

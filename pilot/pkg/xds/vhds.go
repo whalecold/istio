@@ -23,8 +23,8 @@ func (vhds *VhdsGenerator) GenerateDeltas(proxy *model.Proxy, req *model.PushReq
 	if !vhdsNeedsPush(req) {
 		return nil, nil, model.DefaultXdsLogDetails, true, nil
 	}
-	resources, logDetails := vhds.Server.ConfigGenerator.BuildVirtualHosts(proxy, req, w.ResourceNames)
-	return resources, nil, logDetails, true, nil
+	resources, deleted, logDetails := vhds.Server.ConfigGenerator.BuildVirtualHosts(proxy, req, w.ResourceNames)
+	return resources, deleted, logDetails, true, nil
 }
 
 func vhdsNeedsPush(req *model.PushRequest) bool {

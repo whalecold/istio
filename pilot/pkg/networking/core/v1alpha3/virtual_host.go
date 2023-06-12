@@ -24,8 +24,9 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 	node *model.Proxy,
 	req *model.PushRequest,
 	resourceNames []string,
-) ([]*discovery.Resource, model.XdsLogDetails) {
+) ([]*discovery.Resource, model.DeletedResources, model.XdsLogDetails) {
 	var vhdsConfigurations model.Resources
+	var deletedConfigurations model.DeletedResources
 	efw := req.Push.EnvoyFilters(node)
 	errs := make([]error, 0, len(resourceNames))
 	switch node.Type {
@@ -34,21 +35,24 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 			networking.EnvoyFilter_VIRTUAL_HOST,
 			networking.EnvoyFilter_HTTP_ROUTE,
 		)
+
 		for _, resourceName := range resourceNames {
 			// not support wildcard char
 			if resourceName == "*" {
 				continue
 			}
 
-			vhds, err := buildSidecarOutboundVirtualHosts(node, req, resourceName, efw, envoyfilterKeys)
+			vhds, duplicate, err := buildSidecarOutboundVirtualHosts(node, req, resourceName, efw, envoyfilterKeys)
 			if err != nil {
 				errs = append(errs, err)
 				continue
 			}
-			if vhds == nil {
-				continue
+			if vhds != nil {
+				vhdsConfigurations = append(vhdsConfigurations, vhds)
 			}
-			vhdsConfigurations = append(vhdsConfigurations, vhds)
+			if duplicate {
+				deletedConfigurations = append(deletedConfigurations, resourceName)
+			}
 		}
 	case model.Router:
 		// TODO to be implemented.
@@ -57,7 +61,7 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 	if len(errs) != 0 {
 		info = errors.NewAggregate(errs).Error()
 	}
-	return vhdsConfigurations, model.XdsLogDetails{
+	return vhdsConfigurations, deletedConfigurations, model.XdsLogDetails{
 		AdditionalInfo: info,
 	}
 }
@@ -70,10 +74,11 @@ func buildSidecarOutboundVirtualHosts(
 	resourceName string,
 	efw *model.EnvoyFilterWrapper,
 	efKeys []string,
-) (*discovery.Resource, error) {
+) (*discovery.Resource, bool, error) {
+	var shouldDeleted bool
 	listenerPort, vhdsName, vhdsDomain, err := parseVirtualHostResourceName(resourceName)
 	if err != nil {
-		return nil, err
+		return nil, shouldDeleted, err
 	}
 
 	// TODO use single function or reuse the old rds patches.
@@ -87,9 +92,20 @@ func buildSidecarOutboundVirtualHosts(
 			}
 		}
 	}
+
+	domains := []string{vhdsDomain, vhdsName}
 	if virtualHost == nil {
 		// build default policy.
-		virtualHost = buildDefaultVirtualHost(node, vhdsName, []string{vhdsDomain, vhdsName})
+		// FIXME: how to distinguish the virtualHost is external or should be deleted.
+		virtualHost = buildDefaultVirtualHost(node, vhdsName, domains)
+	} else {
+		// Only unique values for domains are permitted set in one route.
+		// conditions:
+		// 1. curl productpage.bookinfo:9080 productpage.bookinfo.svc.cluster.local:9080 separatly, it will generate two Passthrough vhds
+		//	if there is no correspond service.
+		// 2. after creating correspond service, the domains in the two virtualHost would be duplicate. Envoy forbids to exist duplicate domain in one route.
+		virtualHost.Domains = domains
+		virtualHost.Name = vhdsName
 	}
 
 	out := &route.RouteConfiguration{
@@ -106,7 +122,7 @@ func buildSidecarOutboundVirtualHosts(
 		Name:     resourceName,
 		Resource: protoconv.MessageToAny(virtualHost),
 	}
-	return resource, nil
+	return resource, shouldDeleted, nil
 }
 
 // parseVirtualHostResourceName the format is routeName/domain:routeName
