@@ -35,6 +35,11 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 			networking.EnvoyFilter_HTTP_ROUTE,
 		)
 		for _, resourceName := range resourceNames {
+			// not support wildcard char
+			if resourceName == "*" {
+				continue
+			}
+
 			vhds, err := buildSidecarOutboundVirtualHosts(node, req, resourceName, efw, envoyfilterKeys)
 			if err != nil {
 				errs = append(errs, err)

@@ -495,6 +495,8 @@ func warmingDependencies(typeURL string) []string {
 	switch typeURL {
 	case v3.ClusterType:
 		return []string{v3.EndpointType}
+	case v3.RouteType:
+		return []string{v3.VirtualHostType}
 	default:
 		return nil
 	}

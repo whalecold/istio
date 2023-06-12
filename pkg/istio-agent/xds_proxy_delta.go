@@ -252,7 +252,6 @@ func (p *XdsProxy) handleUpstreamDeltaResponse(con *ProxyConnection) {
 				})
 				continue
 			}
-
 			switch resp.TypeUrl {
 			case v3.ExtensionConfigurationType:
 				if features.WasmRemoteLoadConversion {

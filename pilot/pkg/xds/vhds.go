@@ -28,6 +28,22 @@ func (vhds *VhdsGenerator) GenerateDeltas(proxy *model.Proxy, req *model.PushReq
 }
 
 func vhdsNeedsPush(req *model.PushRequest) bool {
-	// TODO
-	return true
+	if req == nil {
+		return true
+	}
+	if !req.Full {
+		// vhds only handles full push
+		return false
+	}
+	// If none set, we will always push
+	if len(req.ConfigsUpdated) == 0 {
+		return true
+	}
+
+	for config := range req.ConfigsUpdated {
+		if _, f := skippedRdsConfigs[config.Kind]; !f {
+			return true
+		}
+	}
+	return false
 }

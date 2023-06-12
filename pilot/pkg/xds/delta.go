@@ -336,7 +336,7 @@ func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery
 	// We should always respond with the current resource names.
 	if previousInfo == nil {
 		if len(request.InitialResourceVersions) > 0 {
-			deltaLog.Debugf("ADS:%s: RECONNECT %s %s", stype, con.conID, request.ResponseNonce)
+			deltaLog.Debugf("ADS:%s: RECONNECT %s %s subscribe %v unsubscribe %v", stype, con.conID, request.ResponseNonce, request.ResourceNamesSubscribe, request.ResourceNamesUnsubscribe)
 		} else {
 			deltaLog.Debugf("ADS:%s: INIT %s %s %v", stype, con.conID, request.ResponseNonce, request.ResourceNamesSubscribe)
 		}
@@ -377,6 +377,7 @@ func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery
 	// If it comes here, that means nonce match. This an ACK. We should record
 	// the ack details and respond if there is a change in resource names.
 	con.proxy.Lock()
+	// TODO vhds has wildcard char *, should delete it.
 	previousResources := con.proxy.WatchedResources[request.TypeUrl].ResourceNames
 	deltaResources := deltaWatchedResources(previousResources, request)
 	con.proxy.WatchedResources[request.TypeUrl].NonceAcked = request.ResponseNonce
