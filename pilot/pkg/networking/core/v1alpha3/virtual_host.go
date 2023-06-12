@@ -45,8 +45,12 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 	case model.Router:
 		// TODO to be implemented.
 	}
+	var info string
+	if len(errs) != 0 {
+		info = errors.NewAggregate(errs).Error()
+	}
 	return vhdsConfigurations, model.XdsLogDetails{
-		AdditionalInfo: errors.NewAggregate(errs).Error(),
+		AdditionalInfo: info,
 	}
 }
 

@@ -975,6 +975,7 @@ func ParseServiceNodeWithMetadata(nodeID string, metadata *NodeMetadata) (*Proxy
 	//	fmt.Printf("test node id %v enable ondemand......\n", nodeID)
 	//}
 	out.OnDemandEnable = metadata.OnDemandXds
+	fmt.Printf("test node id %v enable ondemand...... %v\n", nodeID, metadata.OnDemandXds)
 
 	if !IsApplicationNodeType(NodeType(parts[0])) {
 		return out, fmt.Errorf("invalid node type (valid types: sidecar, router in the service node %q", nodeID)
