@@ -40,6 +40,9 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 				errs = append(errs, err)
 				continue
 			}
+			if vhds == nil {
+				continue
+			}
 			vhdsConfigurations = append(vhdsConfigurations, vhds)
 		}
 	case model.Router:

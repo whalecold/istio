@@ -22,7 +22,6 @@ import (
 	"time"
 
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	"github.com/envoyproxy/go-control-plane/pkg/resource/v3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
@@ -172,10 +171,6 @@ func (s *DiscoveryServer) pushConnectionDelta(con *Connection, pushEv *Event) er
 	// Each Generator is responsible for determining if the push event requires a push
 	wrl, ignoreEvents := con.pushDetails()
 	for _, w := range wrl {
-		if w.TypeUrl == resource.VirtualHostType {
-			deltaLog.Debugf("ignore push vhds %v", con.conID)
-			continue
-		}
 		if err := s.pushDeltaXds(con, w, pushRequest); err != nil {
 			return err
 		}
@@ -343,7 +338,7 @@ func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery
 		if len(request.InitialResourceVersions) > 0 {
 			deltaLog.Debugf("ADS:%s: RECONNECT %s %s", stype, con.conID, request.ResponseNonce)
 		} else {
-			deltaLog.Debugf("ADS:%s: INIT %s %s %s", stype, con.conID, request.ResponseNonce, request.ResourceNamesSubscribe)
+			deltaLog.Debugf("ADS:%s: INIT %s %s %v", stype, con.conID, request.ResponseNonce, request.ResourceNamesSubscribe)
 		}
 		con.proxy.Lock()
 		con.proxy.WatchedResources[request.TypeUrl] = &model.WatchedResource{
@@ -426,12 +421,9 @@ func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery
 func (s *DiscoveryServer) pushDeltaXds(con *Connection,
 	w *model.WatchedResource, req *model.PushRequest,
 ) error {
-	stype := v3.GetShortType(w.TypeUrl)
-	deltaLog.Debugf("ADS:%s: pushDeltaXds %s %v", stype, con.conID, w.ResourceNames)
 	if w == nil {
 		return nil
 	}
-	deltaLog.Debugf("ADS:%s: findGenerator %s", stype, con.conID)
 	gen := s.findGenerator(w.TypeUrl, con)
 	if gen == nil {
 		return nil
@@ -460,7 +452,6 @@ func (s *DiscoveryServer) pushDeltaXds(con *Connection,
 	var err error
 	switch g := gen.(type) {
 	case model.XdsDeltaResourceGenerator:
-		deltaLog.Debugf("ADS:%s: GenerateDeltas %s", stype, con.conID)
 		res, deletedRes, logdata, usedDelta, err = g.GenerateDeltas(con.proxy, req, w)
 		if features.EnableUnsafeDeltaTest {
 			fullRes, l, _ := g.Generate(con.proxy, originalW, req)
@@ -469,11 +460,7 @@ func (s *DiscoveryServer) pushDeltaXds(con *Connection,
 	case model.XdsResourceGenerator:
 		res, logdata, err = g.Generate(con.proxy, w, req)
 	}
-	if err == nil && deletedRes == nil {
-		deltaLog.Debugf("ADS:%s: empty %s err ", stype, con.conID)
-	}
-	if err != nil || (res == nil && deletedRes == nil && stype != "VHDS") {
-		deltaLog.Debugf("ADS:%s: Error %s err %v", stype, con.conID, err)
+	if err != nil || (res == nil && deletedRes == nil) {
 		// If we have nothing to send, report that we got an ACK for this version.
 		if s.StatusReporter != nil {
 			s.StatusReporter.RegisterEvent(con.conID, w.TypeUrl, req.Push.LedgerVersion)
@@ -481,7 +468,6 @@ func (s *DiscoveryServer) pushDeltaXds(con *Connection,
 		return err
 	}
 	defer func() { recordPushTime(w.TypeUrl, time.Since(t0)) }()
-	deltaLog.Debugf("ADS:%s: DeltaDiscoveryResponse %s", stype, con.conID)
 	resp := &discovery.DeltaDiscoveryResponse{
 		ControlPlane: ControlPlane(),
 		TypeUrl:      w.TypeUrl,
@@ -525,10 +511,8 @@ func (s *DiscoveryServer) pushDeltaXds(con *Connection,
 		info += logFiltered
 	}
 
-	deltaLog.Debugf("ADS:%s: %s %s", stype, ptype, con.conID)
 	if err := con.sendDelta(resp); err != nil {
 		if recordSendError(w.TypeUrl, err) {
-			deltaLog.Errorf("ADS:%s: %s %s", stype, ptype, con.conID)
 			deltaLog.Warnf("%s: Send failure for node:%s resources:%d size:%s%s: %v",
 				v3.GetShortType(w.TypeUrl), con.proxy.ID, len(res), util.ByteCount(configSize), info, err)
 		}

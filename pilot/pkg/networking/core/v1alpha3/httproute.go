@@ -207,15 +207,8 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 		ValidateClusters: proto.BoolFalse,
 	}
 
-	if node.OnDemandEnable {
-		out.Vhds = &route.Vhds{
-			ConfigSource: &v3.ConfigSource{
-				ConfigSourceSpecifier: &v3.ConfigSource_Ads{
-					Ads: &v3.AggregatedConfigSource{},
-				},
-				ResourceApiVersion: v3.ApiVersion_V3,
-			},
-		}
+	if node.OnDemandEnable && !useSniffing {
+		out.Vhds = vhdsConfiguration()
 	} else {
 		out.VirtualHosts = virtualHosts
 	}
@@ -237,6 +230,17 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 	}
 
 	return resource, false
+}
+
+func vhdsConfiguration() *route.Vhds {
+	return &route.Vhds{
+		ConfigSource: &v3.ConfigSource{
+			ConfigSourceSpecifier: &v3.ConfigSource_Ads{
+				Ads: &v3.AggregatedConfigSource{},
+			},
+			ResourceApiVersion: v3.ApiVersion_V3,
+		},
+	}
 }
 
 // TODO: merge with IstioEgressListenerWrapper.selectVirtualServices
