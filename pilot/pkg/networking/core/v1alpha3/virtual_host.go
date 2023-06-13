@@ -117,7 +117,7 @@ func buildSidecarOutboundVirtualHosts(
 
 	domains := make([]string, 1, 2)
 	domains[0] = vhdsDomain
-	// the vhdsName may be equal with vhdsName when port is 80 and it can not be set port explicitly.
+	// the vhdsName may be equal with vhdsDomain when port is 80 and it can not be set port explicitly.
 	if listenerPort != 80 && vhdsDomain != vhdsName {
 		domains = append(domains, vhdsName)
 	}
