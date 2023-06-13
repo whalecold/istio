@@ -22,7 +22,7 @@ import (
 	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	"google.golang.org/protobuf/types/known/durationpb"
-	networking "istio.io/api/networking/v1alpha3"
+	networkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	"k8s.io/apimachinery/pkg/util/errors"
 
 	"istio.io/istio/pilot/pkg/model"
@@ -46,8 +46,8 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 	switch node.Type {
 	case model.SidecarProxy:
 		envoyfilterKeys := efw.KeysApplyingTo(
-			networking.EnvoyFilter_VIRTUAL_HOST,
-			networking.EnvoyFilter_HTTP_ROUTE,
+			networkingv1alpha3.EnvoyFilter_VIRTUAL_HOST,
+			networkingv1alpha3.EnvoyFilter_HTTP_ROUTE,
 		)
 
 		for _, resourceName := range resourceNames {
@@ -90,7 +90,7 @@ func buildSidecarOutboundVirtualHosts(
 	efw *model.EnvoyFilterWrapper,
 	efKeys []string,
 ) (*discovery.Resource, bool, error) {
-
+	var shouldDeleted bool
 	listenerPort, vhdsName, vhdsDomain, err := parseVirtualHostResourceName(resourceName)
 	if err != nil {
 		return nil, false, err
@@ -120,9 +120,10 @@ func buildSidecarOutboundVirtualHosts(
 	} else {
 		// Only unique values for domains are permitted set in one route.
 		// conditions:
-		// 1. curl productpage.bookinfo:9080 productpage.bookinfo.svc.cluster.local:9080 separatly, it will generate two Passthrough vhds
-		//	if there is no correspond service.
-		// 2. after creating correspond service, the domains in the two virtualHost would be duplicate. Envoy forbids to exist duplicate domain in one route.
+		// 1. curl productpage.bookinfo:9080 productpage.bookinfo.svc.cluster.local:9080 separatly,
+		//  it will generate two Passthrough vhds if there is no correspond service.
+		// 2. after creating correspond service, the domains in the two virtualHost would be duplicate.
+		//  Envoy forbids to exist duplicate domain in one route.
 		virtualHost.Domains = domains
 		virtualHost.Name = vhdsName
 	}
@@ -135,13 +136,13 @@ func buildSidecarOutboundVirtualHosts(
 
 	// apply envoy filter patches
 	// TODO use single function or reuse the old rds patches.
-	envoyfilter.ApplyRouteConfigurationPatches(networking.EnvoyFilter_SIDECAR_OUTBOUND, node, efw, out)
+	envoyfilter.ApplyRouteConfigurationPatches(networkingv1alpha3.EnvoyFilter_SIDECAR_OUTBOUND, node, efw, out)
 
 	resource := &discovery.Resource{
 		Name:     resourceName,
 		Resource: protoconv.MessageToAny(virtualHost),
 	}
-	return resource, false, nil
+	return resource, shouldDeleted, nil
 }
 
 // parseVirtualHostResourceName the format is routeName/domain:routeName

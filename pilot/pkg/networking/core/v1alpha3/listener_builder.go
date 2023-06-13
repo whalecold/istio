@@ -289,7 +289,10 @@ func blackholeFilterChain(push *model.PushContext, node *model.Proxy) *listener.
 	}
 }
 
-func (lb *ListenerBuilder) buildHTTPConnectionManager(httpOpts *httpListenerOpts, enableOnDemandFilter bool) *hcm.HttpConnectionManager {
+func (lb *ListenerBuilder) buildHTTPConnectionManager(
+	httpOpts *httpListenerOpts,
+	enableOnDemandFilter bool,
+) *hcm.HttpConnectionManager {
 	if httpOpts.connectionManager == nil {
 		httpOpts.connectionManager = &hcm.HttpConnectionManager{}
 	}

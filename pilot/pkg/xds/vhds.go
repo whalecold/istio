@@ -27,7 +27,9 @@ type VhdsGenerator struct {
 
 var _ model.XdsResourceGenerator = &VhdsGenerator{}
 
-func (vhds *VhdsGenerator) Generate(proxy *model.Proxy, w *model.WatchedResource, req *model.PushRequest) (model.Resources, model.XdsLogDetails, error) {
+func (vhds *VhdsGenerator) Generate(proxy *model.Proxy, w *model.WatchedResource,
+	req *model.PushRequest,
+) (model.Resources, model.XdsLogDetails, error) {
 	return nil, model.DefaultXdsLogDetails, fmt.Errorf("vhds unsupport sotw ads")
 }
 

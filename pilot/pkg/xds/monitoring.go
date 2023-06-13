@@ -269,7 +269,6 @@ func incrementXDSRejects(xdsType string, node, errCode string) {
 		rdsReject.With(nodeTag.Value(node), errTag.Value(errCode)).Increment()
 	case v3.VirtualHostType:
 		vhdsReject.With(nodeTag.Value(node), errTag.Value(errCode)).Increment()
-
 	}
 }
 
