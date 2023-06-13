@@ -515,7 +515,7 @@ func dedupeDomains(domains []string, vhdomains sets.String, expandedHosts []stri
 		temp = append(temp, d)
 		vhdomains.Insert(d)
 	}
-	return sort.StringSlice(temp)
+	return temp
 }
 
 // Returns the set of virtual hosts that correspond to the listener that has HTTP protocol detection

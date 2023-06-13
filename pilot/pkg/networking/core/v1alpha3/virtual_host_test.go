@@ -52,15 +52,22 @@ func TestParseVirtualHostResourceName(t *testing.T) {
 			port:         9080,
 			name:         "productpage.bookinfo:9080",
 			domain:       "productpage.bookinfo",
-			err:          nil,
+		},
+		{
+			resourceName: "80/www.sample.com",
+			port:         80,
+			name:         "www.sample.com",
+			domain:       "www.sample.com",
+		},
+		{
+			resourceName: "9080/productpage.bookinfo:9081",
+			port:         9080,
+			name:         "productpage.bookinfo:9081",
+			domain:       "productpage.bookinfo",
 		},
 		{
 			resourceName: "908d/productpage.bookinfo:908d",
 			err:          fmt.Errorf("invalid format resource name 908d/productpage.bookinfo:908d"),
-		},
-		{
-			resourceName: "9080/productpage.bookinfo:9081",
-			err:          fmt.Errorf("invalid format resource name 9080/productpage.bookinfo:9081"),
 		},
 		{
 			resourceName: "9080:9080/productpage.bookinfo:9081",
