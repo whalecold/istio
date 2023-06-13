@@ -39,10 +39,11 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 		for _, resourceName := range resourceNames {
 			// not support wildcard char
 			if resourceName == "*" {
+				deletedConfigurations = append(deletedConfigurations, resourceName)
 				continue
 			}
 
-			vhds, duplicate, err := buildSidecarOutboundVirtualHosts(node, req, resourceName, efw, envoyfilterKeys)
+			vhds, shouldDeleted, err := buildSidecarOutboundVirtualHosts(node, req, resourceName, efw, envoyfilterKeys)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -50,7 +51,7 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 			if vhds != nil {
 				vhdsConfigurations = append(vhdsConfigurations, vhds)
 			}
-			if duplicate {
+			if shouldDeleted {
 				deletedConfigurations = append(deletedConfigurations, resourceName)
 			}
 		}
@@ -75,14 +76,18 @@ func buildSidecarOutboundVirtualHosts(
 	efw *model.EnvoyFilterWrapper,
 	efKeys []string,
 ) (*discovery.Resource, bool, error) {
-	var shouldDeleted bool
+
 	listenerPort, vhdsName, vhdsDomain, err := parseVirtualHostResourceName(resourceName)
 	if err != nil {
-		return nil, shouldDeleted, err
+		return nil, false, err
 	}
 
-	// TODO use single function or reuse the old rds patches.
-	vhosts, _, _ := BuildSidecarOutboundVirtualHosts(node, req.Push, strconv.Itoa(listenerPort), listenerPort, efKeys, &model.DisabledCache{})
+	routeName := strconv.Itoa(listenerPort)
+
+	// TODO
+	// 1. use single function or reuse the old one.
+	// 2. remove the vhds whose correspond route has been deleted.
+	vhosts, _, _ := BuildSidecarOutboundVirtualHosts(node, req.Push, routeName, listenerPort, efKeys, &model.DisabledCache{}, nil)
 	var virtualHost *route.VirtualHost
 	for _, vh := range vhosts {
 		for _, domain := range vh.Domains {
@@ -122,7 +127,7 @@ func buildSidecarOutboundVirtualHosts(
 		Name:     resourceName,
 		Resource: protoconv.MessageToAny(virtualHost),
 	}
-	return resource, shouldDeleted, nil
+	return resource, false, nil
 }
 
 // parseVirtualHostResourceName the format is routeName/domain:routeName
