@@ -848,7 +848,7 @@ func (lb *ListenerBuilder) buildInboundNetworkFiltersForHTTP(cc inboundChainConf
 	}
 
 	httpOpts := buildSidecarInboundHTTPOpts(lb, cc)
-	hcm := lb.buildHTTPConnectionManager(httpOpts)
+	hcm := lb.buildHTTPConnectionManager(httpOpts, false)
 	filters = append(filters, &listener.Filter{
 		Name:       wellknown.HTTPConnectionManager,
 		ConfigType: &listener.Filter_TypedConfig{TypedConfig: protoconv.MessageToAny(hcm)},

@@ -195,6 +195,20 @@ var (
 		Name:       "envoy.filters.listener.metadata_to_peer_node",
 		ConfigType: &listener.ListenerFilter_TypedConfig{TypedConfig: protoconv.TypedStruct("type.googleapis.com/istio.telemetry.metadatatopeernode.v1.Config")},
 	}
+	OnDemand = &hcm.HttpFilter{
+		Name: "envoy.filters.http.on_demand",
+		ConfigType: &hcm.HttpFilter_TypedConfig{
+			TypedConfig: protoconv.MessageToAny(&ondemand.OnDemand{
+				Odcds: &ondemand.OnDemandCds{
+					Source: &core.ConfigSource{
+						ConfigSourceSpecifier: &core.ConfigSource_Ads{
+							Ads: &core.AggregatedConfigSource{},
+						},
+					},
+				},
+			}),
+		},
+	}
 )
 
 func BuildRouterFilter(ctx *RouterFilterContext) *hcm.HttpFilter {
@@ -207,23 +221,6 @@ func BuildRouterFilter(ctx *RouterFilterContext) *hcm.HttpFilter {
 		ConfigType: &hcm.HttpFilter_TypedConfig{
 			TypedConfig: protoconv.MessageToAny(&router.Router{
 				StartChildSpan: ctx.StartChildSpan,
-			}),
-		},
-	}
-}
-
-func BuildOnDemandFilter() *hcm.HttpFilter {
-	return &hcm.HttpFilter{
-		Name: "envoy.filters.http.on_demand",
-		ConfigType: &hcm.HttpFilter_TypedConfig{
-			TypedConfig: protoconv.MessageToAny(&ondemand.OnDemand{
-				Odcds: &ondemand.OnDemandCds{
-					Source: &core.ConfigSource{
-						ConfigSourceSpecifier: &core.ConfigSource_Ads{
-							Ads: &core.AggregatedConfigSource{},
-						},
-					},
-				},
 			}),
 		},
 	}

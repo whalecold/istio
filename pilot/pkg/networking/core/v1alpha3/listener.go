@@ -572,7 +572,7 @@ func (lb *ListenerBuilder) buildHTTPProxy(node *model.Proxy,
 			FilterChains: []istionetworking.FilterChain{{}},
 		},
 	}
-	if err := mutable.build(lb, opts); err != nil {
+	if err := mutable.build(lb, opts, false); err != nil {
 		log.Warn("buildHTTPProxy filter chain error  ", err.Error())
 		return nil
 	}
@@ -950,7 +950,7 @@ func (lb *ListenerBuilder) buildSidecarOutboundListenerForPortOrUDS(listenerOpts
 	}
 
 	// Filters are serialized one time into an opaque struct once we have the complete list.
-	if err := mutable.build(lb, listenerOpts); err != nil {
+	if err := mutable.build(lb, listenerOpts, true); err != nil {
 		log.Warn("buildSidecarOutboundListeners: ", err.Error())
 		return
 	}
@@ -1320,7 +1320,7 @@ func appendListenerFallthroughRouteForCompleteListener(l *listener.Listener, nod
 // TODO: given how tightly tied listener.FilterChains, opts.filterChainOpts, and mutable.FilterChains
 // are to each other we should encapsulate them some way to ensure they remain consistent (mainly that
 // in each an index refers to the same chain).
-func (ml *MutableListener) build(builder *ListenerBuilder, opts buildListenerOpts) error {
+func (ml *MutableListener) build(builder *ListenerBuilder, opts buildListenerOpts, enableOnDemandFilter bool) error {
 	if len(opts.filterChainOpts) == 0 {
 		return fmt.Errorf("must have more than 0 chains in listener %q", ml.Listener.Name)
 	}
@@ -1366,7 +1366,7 @@ func (ml *MutableListener) build(builder *ListenerBuilder, opts buildListenerOpt
 			if opts.port != nil {
 				opt.httpOpts.port = opts.port.Port
 			}
-			httpConnectionManagers[i] = builder.buildHTTPConnectionManager(opt.httpOpts)
+			httpConnectionManagers[i] = builder.buildHTTPConnectionManager(opt.httpOpts, enableOnDemandFilter)
 			filter := &listener.Filter{
 				Name:       wellknown.HTTPConnectionManager,
 				ConfigType: &listener.Filter_TypedConfig{TypedConfig: protoconv.MessageToAny(httpConnectionManagers[i])},
