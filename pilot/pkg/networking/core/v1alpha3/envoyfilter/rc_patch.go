@@ -37,10 +37,13 @@ func VirtualHostDeletable(
 	virtualHost *route.VirtualHost,
 ) bool {
 	defer runtime.HandleCrash(runtime.LogPanic, func(any) {
-		IncrementEnvoyFilterErrorMetric(Route)
-		log.Errorf("route patch caused panic, so the patches did not take effect")
+		IncrementEnvoyFilterErrorMetric(VirtualHost)
+		log.Errorf("virtualHost patch caused panic, so the patches did not take effect")
 	})
 	// In case the patches cause panic, use the route generated before to reduce the influence.
+	if virtualHost == nil {
+		return false
+	}
 	if efw == nil {
 		return false
 	}
@@ -58,6 +61,45 @@ func VirtualHostDeletable(
 		}
 	}
 	return false
+}
+
+// ApplyVirtualHostPatches only deal with the MERGE|REPLACE operator for EnvoyFilter_VIRTUAL_HOST. ADD operator
+// take effect in ApplyRouteConfigurationPatches and should deal with separately when operator is REMOVE.
+func ApplyVirtualHostPatches(
+	patchContext networking.EnvoyFilter_PatchContext,
+	proxy *model.Proxy,
+	efw *model.EnvoyFilterWrapper,
+	routeConfigurationName string,
+	vhds *route.VirtualHost,
+) (out *route.VirtualHost) {
+	defer runtime.HandleCrash(runtime.LogPanic, func(any) {
+		IncrementEnvoyFilterErrorMetric(VirtualHost)
+		log.Errorf("virtualHost patch caused panic, so the patches did not take effect")
+	})
+	// In case the patches cause panic, use the route generated before to reduce the influence.
+	if efw == nil {
+		return vhds
+	}
+	var portMap model.GatewayPortMap
+	if proxy.MergedGateway != nil {
+		portMap = proxy.MergedGateway.PortMap
+	}
+	for _, rp := range efw.Patches[networking.EnvoyFilter_VIRTUAL_HOST] {
+		applied := false
+		if commonConditionMatch(patchContext, rp) &&
+			routeConfigurationNameMatch(patchContext, routeConfigurationName, rp, portMap) &&
+			virtualHostMatch(vhds, rp) {
+			applied = true
+			if rp.Operation == networking.EnvoyFilter_Patch_MERGE {
+				merge.Merge(vhds, rp.Value)
+			} else if rp.Operation == networking.EnvoyFilter_Patch_REPLACE {
+				vhds = proto.Clone(rp.Value).(*route.VirtualHost)
+			}
+		}
+		IncrementEnvoyFilterMetric(rp.Key(), VirtualHost, applied)
+	}
+	patchHTTPRoutes(patchContext, efw.Patches, &route.RouteConfiguration{Name: routeConfigurationName}, vhds, portMap)
+	return vhds
 }
 
 func ApplyRouteConfigurationPatches(

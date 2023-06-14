@@ -30,7 +30,6 @@ import (
 	istio_route "istio.io/istio/pilot/pkg/networking/core/v1alpha3/route"
 	"istio.io/istio/pilot/pkg/networking/util"
 	"istio.io/istio/pilot/pkg/util/protoconv"
-	"istio.io/istio/pkg/proto"
 )
 
 type vhdsRequest struct {
@@ -152,16 +151,7 @@ func buildSidecarOutboundVirtualHostsResource(
 			virtualHost.Name = resource.vhdsName
 		}
 
-		rc := &route.RouteConfiguration{
-			Name:             routeName,
-			ValidateClusters: proto.BoolFalse,
-			VirtualHosts:     []*route.VirtualHost{virtualHost},
-		}
-
-		// Apply envoyfilters patches with RouteConfiguration is necessarily as the envoyfilter may use networking.EnvoyFilter_ROUTE_CONFIGURATION
-		// to configure the vhds.
-		// The networking.EnvoyFilter_Patch_ADD for networking.EnvoyFilter_VIRTUAL_HOST does not take effect here but in the generator of RDS.
-		envoyfilter.ApplyRouteConfigurationPatches(networkingv1alpha3.EnvoyFilter_SIDECAR_OUTBOUND, node, efw, rc)
+		virtualHost = envoyfilter.ApplyVirtualHostPatches(networkingv1alpha3.EnvoyFilter_SIDECAR_OUTBOUND, node, efw, routeName, virtualHost)
 
 		out = append(out, &discovery.Resource{
 			Name:     resource.resourceName,
