@@ -22,7 +22,6 @@ import (
 	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"k8s.io/apimachinery/pkg/util/errors"
 
 	networkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	"istio.io/istio/pilot/pkg/model"
@@ -38,17 +37,40 @@ type vhdsRequest struct {
 	vhdsDomain   string
 }
 
+func classifyResourceByPort(resourceNames []string) (map[int][]*vhdsRequest, []string, string) {
+	vhdsRequests := make(map[int][]*vhdsRequest)
+	var deletedConfigurations model.DeletedResources
+	for _, resourceName := range resourceNames {
+		listenerPort, vhdsName, vhdsDomain, err := parseVirtualHostResourceName(resourceName)
+		if err != nil {
+			deletedConfigurations = append(deletedConfigurations, resourceName)
+			continue
+		}
+		vhdsRequests[listenerPort] = append(vhdsRequests[listenerPort], &vhdsRequest{
+			resourceName: resourceName,
+			vhdsName:     vhdsName,
+			vhdsDomain:   vhdsDomain,
+		})
+	}
+	if len(deletedConfigurations) != 0 {
+		return vhdsRequests, deletedConfigurations, fmt.Sprintf("invalid resource names: %s", strings.Join(deletedConfigurations, "|"))
+	}
+	return vhdsRequests, deletedConfigurations, ""
+}
+
 // BuildHTTPRoutes produces a list of routes for the proxy
 func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 	node *model.Proxy,
 	req *model.PushRequest,
 	resourceNames []string,
 ) ([]*discovery.Resource, model.DeletedResources, model.XdsLogDetails) {
-	var vhdsConfigurations model.Resources
-	var deletedConfigurations model.DeletedResources
+	var (
+		vhdsConfigurations    model.Resources
+		deletedConfigurations model.DeletedResources
+		additionalInfo        string
+	)
+
 	efw := req.Push.EnvoyFilters(node)
-	errs := make([]error, 0, len(resourceNames))
-	vhdsRequests := make(map[int][]*vhdsRequest)
 	switch node.Type {
 	case model.SidecarProxy:
 		envoyfilterKeys := efw.KeysApplyingTo(
@@ -56,36 +78,19 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 			networkingv1alpha3.EnvoyFilter_HTTP_ROUTE,
 		)
 
-		for _, resourceName := range resourceNames {
-			listenerPort, vhdsName, vhdsDomain, err := parseVirtualHostResourceName(resourceName)
-			if err != nil {
-				deletedConfigurations = append(deletedConfigurations, resourceName)
-				errs = append(errs, err)
-				continue
-			}
-			vhdsRequests[listenerPort] = append(vhdsRequests[listenerPort], &vhdsRequest{
-				resourceName: resourceName,
-				vhdsName:     vhdsName,
-				vhdsDomain:   vhdsDomain,
-			})
-		}
-
+		var vhdsRequests map[int][]*vhdsRequest
+		vhdsRequests, deletedConfigurations, additionalInfo = classifyResourceByPort(resourceNames)
 		for port, reqs := range vhdsRequests {
 			vhds := buildSidecarOutboundVirtualHostsResource(node, req, port, reqs, efw, envoyfilterKeys)
 			if len(vhds) != 0 {
 				vhdsConfigurations = append(vhdsConfigurations, vhds...)
 			}
 		}
-
 	case model.Router:
 		// TODO not-implemented.
 	}
-	var info string
-	if len(errs) != 0 {
-		info = errors.NewAggregate(errs).Error()
-	}
 	return vhdsConfigurations, deletedConfigurations, model.XdsLogDetails{
-		AdditionalInfo: info,
+		AdditionalInfo: additionalInfo,
 	}
 }
 
@@ -139,7 +144,7 @@ func buildSidecarOutboundVirtualHostsResource(
 			node, efw, routeName, virtualHost) {
 			// If the vhds is removed by envoyfilter or not found, build up with the default policy.
 			// FIXME: how to distinguish the virtualHost is external or should be deleted.
-			virtualHost = buildDefaultVirtualHost(node, resource.vhdsName, domains)
+			virtualHost = buildVirtualHostWithDefaultPolicy(node, resource.vhdsName, domains)
 		} else {
 			// Only unique values for domains are permitted set in one route.
 			// conditions:
@@ -189,7 +194,7 @@ func parseVirtualHostResourceName(resourceName string) (int, string, string, err
 	return port, vhdsName, vhdsDomain, nil
 }
 
-func buildDefaultVirtualHost(node *model.Proxy, name string, domains []string) *route.VirtualHost {
+func buildVirtualHostWithDefaultPolicy(node *model.Proxy, name string, domains []string) *route.VirtualHost {
 	if util.IsAllowAnyOutbound(node) {
 		egressCluster := util.PassthroughCluster
 		notimeout := durationpb.New(0)
