@@ -29,6 +29,37 @@ import (
 	"istio.io/pkg/log"
 )
 
+func VirtualHostDeletable(
+	patchContext networking.EnvoyFilter_PatchContext,
+	proxy *model.Proxy,
+	efw *model.EnvoyFilterWrapper,
+	routeConfigurationName string,
+	virtualHost *route.VirtualHost,
+) bool {
+	defer runtime.HandleCrash(runtime.LogPanic, func(any) {
+		IncrementEnvoyFilterErrorMetric(Route)
+		log.Errorf("route patch caused panic, so the patches did not take effect")
+	})
+	// In case the patches cause panic, use the route generated before to reduce the influence.
+	if efw == nil {
+		return false
+	}
+	var portMap model.GatewayPortMap
+	if proxy.MergedGateway != nil {
+		portMap = proxy.MergedGateway.PortMap
+	}
+	for _, rp := range efw.Patches[networking.EnvoyFilter_VIRTUAL_HOST] {
+		if commonConditionMatch(patchContext, rp) &&
+			routeConfigurationNameMatch(patchContext, routeConfigurationName, rp, portMap) &&
+			virtualHostMatch(virtualHost, rp) {
+			if rp.Operation == networking.EnvoyFilter_Patch_REMOVE {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func ApplyRouteConfigurationPatches(
 	patchContext networking.EnvoyFilter_PatchContext,
 	proxy *model.Proxy,
@@ -261,6 +292,12 @@ func patchHTTPRoute(patchContext networking.EnvoyFilter_PatchContext,
 		}
 		IncrementEnvoyFilterMetric(rp.Key(), Route, applied)
 	}
+}
+
+func routeConfigurationNameMatch(patchContext networking.EnvoyFilter_PatchContext, rcName string,
+	rp *model.EnvoyFilterConfigPatchWrapper, portMap model.GatewayPortMap,
+) bool {
+	return routeConfigurationMatch(patchContext, &route.RouteConfiguration{Name: rcName}, rp, portMap)
 }
 
 func routeConfigurationMatch(patchContext networking.EnvoyFilter_PatchContext, rc *route.RouteConfiguration,

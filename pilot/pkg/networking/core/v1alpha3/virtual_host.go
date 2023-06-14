@@ -128,6 +128,7 @@ func buildSidecarOutboundVirtualHostsResource(
 	efw *model.EnvoyFilterWrapper,
 	efKeys []string,
 ) []*discovery.Resource {
+	routeName := strconv.Itoa(listenerPort)
 	out := make([]*discovery.Resource, 0, len(resources))
 	virtualHosts := buildSidecarOutboundVirtualHosts(node, req, listenerPort, efKeys)
 
@@ -135,8 +136,9 @@ func buildSidecarOutboundVirtualHostsResource(
 		virtualHost := virtualHosts[resource.vhdsDomain]
 		domains := generateVHDomains(node, resource.vhdsDomain, listenerPort)
 
-		if virtualHost == nil {
-			// build default policy.
+		if virtualHost == nil || envoyfilter.VirtualHostDeletable(networkingv1alpha3.EnvoyFilter_SIDECAR_OUTBOUND,
+			node, efw, routeName, virtualHost) {
+			// If the vhds is removed by envoyfilter or not found, build up with the default policy.
 			// FIXME: how to distinguish the virtualHost is external or should be deleted.
 			virtualHost = buildDefaultVirtualHost(node, resource.vhdsName, domains)
 		} else {
@@ -151,13 +153,14 @@ func buildSidecarOutboundVirtualHostsResource(
 		}
 
 		rc := &route.RouteConfiguration{
-			Name:             strconv.Itoa(listenerPort),
+			Name:             routeName,
 			ValidateClusters: proto.BoolFalse,
 			VirtualHosts:     []*route.VirtualHost{virtualHost},
 		}
 
-		// apply envoy filter patches
-		// TODO use single function or reuse the old rds patches.
+		// Apply envoyfilters patches with RouteConfiguration is necessarily as the envoyfilter may use networking.EnvoyFilter_ROUTE_CONFIGURATION
+		// to configure the vhds.
+		// The networking.EnvoyFilter_Patch_ADD for networking.EnvoyFilter_VIRTUAL_HOST does not take effect here but in the generator of RDS.
 		envoyfilter.ApplyRouteConfigurationPatches(networkingv1alpha3.EnvoyFilter_SIDECAR_OUTBOUND, node, efw, rc)
 
 		out = append(out, &discovery.Resource{
