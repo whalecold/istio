@@ -72,7 +72,7 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 		}
 
 		for port, reqs := range vhdsRequests {
-			vhds := buildSidecarOutboundVirtualHosts(node, req, port, reqs, efw, envoyfilterKeys)
+			vhds := buildSidecarOutboundVirtualHostsResource(node, req, port, reqs, efw, envoyfilterKeys)
 			if len(vhds) != 0 {
 				vhdsConfigurations = append(vhdsConfigurations, vhds...)
 			}
@@ -90,9 +90,37 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 	}
 }
 
-// buildSidecarOutboundVirtualHosts builds an outbound HTTP Route for sidecar.
-// Based on port, will determine all virtual hosts that listen on the port.
+func generateVHDomains(node *model.Proxy, domain string, port int) []string {
+	if SidecarIgnorePort(node) && port != 0 {
+		// Indicate we do not need port, as we will set IgnorePortInHostMatching
+		port = portNoAppendPortSuffix
+	}
+	domains := make([]string, 0, 2)
+	return appendDomainPort(domains, domain, port)
+}
+
 func buildSidecarOutboundVirtualHosts(
+	node *model.Proxy,
+	req *model.PushRequest,
+	listenerPort int,
+	efKeys []string,
+) map[string]*route.VirtualHost {
+	routeName := strconv.Itoa(listenerPort)
+	// TODO use single function or reuse the old one.
+	// FIXME remove the vhds whose correspond route has been deleted.
+	vhosts, _, _ := BuildSidecarOutboundVirtualHosts(node, req.Push, routeName, listenerPort, efKeys, &model.DisabledCache{})
+	virtualHosts := make(map[string]*route.VirtualHost)
+	for _, vhds := range vhosts {
+		for _, domain := range vhds.Domains {
+			virtualHosts[domain] = vhds
+		}
+	}
+	return virtualHosts
+}
+
+// buildSidecarOutboundVirtualHostsResource builds an outbound HTTP Route for sidecar.
+// Based on port, will determine all virtual hosts that listen on the port.
+func buildSidecarOutboundVirtualHostsResource(
 	node *model.Proxy,
 	req *model.PushRequest,
 	listenerPort int,
@@ -100,32 +128,12 @@ func buildSidecarOutboundVirtualHosts(
 	efw *model.EnvoyFilterWrapper,
 	efKeys []string,
 ) []*discovery.Resource {
-
-	routeName := strconv.Itoa(listenerPort)
-	var out []*discovery.Resource
-
-	vhosts, _, _ := BuildSidecarOutboundVirtualHosts(node, req.Push, routeName, listenerPort, efKeys, &model.DisabledCache{})
+	out := make([]*discovery.Resource, 0, len(resources))
+	virtualHosts := buildSidecarOutboundVirtualHosts(node, req, listenerPort, efKeys)
 
 	for _, resource := range resources {
-		// TODO
-		// 1. use single function or reuse the old one.
-		// 2. remove the vhds whose correspond route has been deleted.
-		var virtualHost *route.VirtualHost
-		for _, vh := range vhosts {
-			for _, domain := range vh.Domains {
-				if domain == resource.vhdsDomain {
-					virtualHost = vh
-					break
-				}
-			}
-		}
-
-		domains := make([]string, 1, 2)
-		domains[0] = resource.vhdsDomain
-		// the vhdsName may be equal with vhdsDomain when port is 80 and it can not be set port explicitly.
-		if listenerPort != 80 && resource.vhdsDomain != resource.vhdsName {
-			domains = append(domains, resource.vhdsName)
-		}
+		virtualHost := virtualHosts[resource.vhdsDomain]
+		domains := generateVHDomains(node, resource.vhdsDomain, listenerPort)
 
 		if virtualHost == nil {
 			// build default policy.
