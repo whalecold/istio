@@ -100,6 +100,22 @@ func (configgen *ConfigGeneratorImpl) BuildDeltaClusters(proxy *model.Proxy, upd
 ) ([]*discovery.Resource, []string, model.XdsLogDetails, bool) {
 	// if we can't use delta, fall back to generate all
 	if !shouldUseDelta(updates) {
+		if proxy.OnDemandEnable {
+			var services []*model.Service
+			for _, cluster := range watched.ResourceNames {
+				// WatchedResources.ResourceNames will contain the names of the clusters it is subscribed to. We can
+				// check with the name of our service (cluster names are in the format outbound|<port>||<hostname>).
+				// TODO should filter the useless port in the same service, but the service must not be modified
+				// and the service can not copy as the filed service.Attributes contains sync.RWMutex.
+				_, _, svcHost, _ := model.ParseSubsetKey(cluster)
+				service := updates.Push.ServiceForHostname(proxy, svcHost)
+				if service != nil {
+					services = append(services, service)
+				}
+			}
+			cl, lg := configgen.buildClusters(proxy, updates, services)
+			return cl, nil, lg, false
+		}
 		cl, lg := configgen.BuildClusters(proxy, updates)
 		return cl, nil, lg, false
 	}

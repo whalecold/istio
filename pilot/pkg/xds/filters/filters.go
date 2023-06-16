@@ -51,6 +51,9 @@ const (
 	RawBufferTransportProtocol = "raw_buffer"
 
 	MxFilterName = "istio.metadata_exchange"
+
+	// HTTPOnDemand HTTP on_demand filter
+	HTTPOnDemand = "envoy.filters.http.on_demand"
 )
 
 // Define static filters to be reused across the codebase. This avoids duplicate marshaling/unmarshaling
@@ -195,18 +198,31 @@ var (
 		Name:       "envoy.filters.listener.metadata_to_peer_node",
 		ConfigType: &listener.ListenerFilter_TypedConfig{TypedConfig: protoconv.TypedStruct("type.googleapis.com/istio.telemetry.metadatatopeernode.v1.Config")},
 	}
-	OnDemand = &hcm.HttpFilter{
-		Name: "envoy.filters.http.on_demand",
-		ConfigType: &hcm.HttpFilter_TypedConfig{
-			TypedConfig: protoconv.MessageToAny(&ondemand.OnDemand{
-				Odcds: &ondemand.OnDemandCds{
-					Source: &core.ConfigSource{
-						ConfigSourceSpecifier: &core.ConfigSource_Ads{
-							Ads: &core.AggregatedConfigSource{},
-						},
-					},
+
+	PerRouteOdcds = protoconv.MessageToAny(&ondemand.PerRouteConfig{
+		Odcds: &ondemand.OnDemandCds{
+			Source: &core.ConfigSource{
+				ConfigSourceSpecifier: &core.ConfigSource_Ads{
+					Ads: &core.AggregatedConfigSource{},
 				},
-			}),
+			},
+		},
+	})
+
+	AdsOdcds = protoconv.MessageToAny(&ondemand.OnDemand{
+		Odcds: &ondemand.OnDemandCds{
+			Source: &core.ConfigSource{
+				ConfigSourceSpecifier: &core.ConfigSource_Ads{
+					Ads: &core.AggregatedConfigSource{},
+				},
+			},
+		},
+	})
+
+	OnDemand = &hcm.HttpFilter{
+		Name: HTTPOnDemand,
+		ConfigType: &hcm.HttpFilter_TypedConfig{
+			TypedConfig: AdsOdcds,
 		},
 	}
 )

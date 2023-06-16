@@ -24,6 +24,7 @@ import (
 	v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	networking "istio.io/api/networking/v1alpha3"
@@ -35,6 +36,7 @@ import (
 	"istio.io/istio/pilot/pkg/networking/util"
 	"istio.io/istio/pilot/pkg/serviceregistry/provider"
 	"istio.io/istio/pilot/pkg/util/protoconv"
+	xdsfilters "istio.io/istio/pilot/pkg/xds/filters"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/constants"
 	"istio.io/istio/pkg/config/host"
@@ -411,6 +413,13 @@ func BuildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext
 	vhdomains := sets.String{}
 	knownFQDN := sets.String{}
 
+	var typedConfigs map[string]*any.Any
+	if node.OnDemandEnable {
+		typedConfigs = map[string]*any.Any{
+			xdsfilters.HTTPOnDemand: xdsfilters.PerRouteOdcds,
+		}
+	}
+
 	buildVirtualHost := func(hostname string, vhwrapper istio_route.VirtualHostWrapper, svc *model.Service) *route.VirtualHost {
 		name := util.DomainName(hostname, vhwrapper.Port)
 		if vhosts.InsertContains(name) {
@@ -452,6 +461,7 @@ func BuildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext
 				Name:                       name,
 				Domains:                    domains,
 				Routes:                     vhwrapper.Routes,
+				TypedPerFilterConfig:       typedConfigs,
 				IncludeRequestAttemptCount: true,
 			}
 		}
