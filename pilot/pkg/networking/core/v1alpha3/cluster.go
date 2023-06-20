@@ -93,6 +93,23 @@ func (configgen *ConfigGeneratorImpl) BuildClusters(proxy *model.Proxy, req *mod
 	return configgen.buildClusters(proxy, req, services)
 }
 
+// copyServiceWithPortFilter filters the useless port in the same service.
+func copyServiceWithPortFilter(svc *model.Service, ports map[int]bool) *model.Service {
+	if ports == nil || svc == nil {
+		return nil
+	}
+	out := svc.DeepCopy()
+	var idx int
+	for i, port := range out.Ports {
+		if ports[port.Port] {
+			out.Ports[idx] = out.Ports[i]
+			idx++
+		}
+	}
+	out.Ports = out.Ports[:idx]
+	return out
+}
+
 // BuildDeltaClusters generates the deltas (add and delete) for a given proxy. Currently, only service changes are reflected with deltas.
 // Otherwise, we fall back onto generating everything.
 func (configgen *ConfigGeneratorImpl) BuildDeltaClusters(proxy *model.Proxy, updates *model.PushRequest,
@@ -102,18 +119,21 @@ func (configgen *ConfigGeneratorImpl) BuildDeltaClusters(proxy *model.Proxy, upd
 	if !shouldUseDelta(updates) {
 		if proxy.OnDemandEnable {
 			var services []*model.Service
-			serviceHosts := make(map[host.Name]bool)
+			serviceHosts := make(map[host.Name]map[int]bool)
 			for _, cluster := range watched.ResourceNames {
 				// WatchedResources.ResourceNames will contain the names of the clusters it is subscribed to. We can
 				// check with the name of our service (cluster names are in the format outbound|<port>||<hostname>).
-				// TODO should filter the useless port in the same service, but the service must not be modified
-				// and the service can not copy as the filed service.Attributes contains sync.RWMutex.
-				_, _, svcHost, _ := model.ParseSubsetKey(cluster)
-				serviceHosts[svcHost] = true
+				_, _, svcHost, port := model.ParseSubsetKey(cluster)
+				ports := serviceHosts[svcHost]
+				if ports == nil {
+					ports = make(map[int]bool)
+					serviceHosts[svcHost] = ports
+				}
+				ports[port] = true
 			}
 
-			for svcHost := range serviceHosts {
-				service := updates.Push.ServiceForHostname(proxy, svcHost)
+			for svcHost, ports := range serviceHosts {
+				service := copyServiceWithPortFilter(updates.Push.ServiceForHostname(proxy, svcHost), ports)
 				if service != nil {
 					services = append(services, service)
 				}
