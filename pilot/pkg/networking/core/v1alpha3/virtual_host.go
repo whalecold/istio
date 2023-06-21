@@ -32,11 +32,14 @@ import (
 )
 
 type vhdsRequest struct {
+	// the native resoruce name in the vhds request. default format is routeName/domain:port
 	resourceName string
-	vhdsName     string
-	vhdsDomain   string
+	// domain:port
+	vhdsName   string
+	vhdsDomain string
 }
 
+// classifyResourceByPort classify the vhds resource, treat the resource as deleted if parse failed.
 func classifyResourceByPort(resourceNames []string) (map[int][]*vhdsRequest, []string, string) {
 	vhdsRequests := make(map[int][]*vhdsRequest)
 	var deletedConfigurations model.DeletedResources
@@ -137,6 +140,7 @@ func buildSidecarOutboundVirtualHostsResource(
 	virtualHosts := buildSidecarOutboundVirtualHosts(node, req, listenerPort, efKeys)
 
 	for _, resource := range resources {
+		// the domains of vhds always has the portless one, vhdsDomain is enough to query.
 		virtualHost := virtualHosts[resource.vhdsDomain]
 		domains := generateVHDomains(node, resource.vhdsDomain, listenerPort)
 

@@ -29,6 +29,7 @@ import (
 	"istio.io/pkg/log"
 )
 
+// VirtualHostDeletable returns true is the vhds be removed by the route configuration envoyfilter.
 func VirtualHostDeletable(
 	patchContext networking.EnvoyFilter_PatchContext,
 	proxy *model.Proxy,

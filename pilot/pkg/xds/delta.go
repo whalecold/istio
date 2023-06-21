@@ -409,7 +409,8 @@ func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery
 			return true
 		}
 
-		deltaLog.Debugf("ADS:%s: ACK  %s %s", stype, con.conID, request.ResponseNonce)
+		deltaLog.Debugf("ADS:%s: ACK  %s %s previous resources %v deltaResources %v", stype, con.conID,
+			request.ResponseNonce, previousResources, deltaResources)
 		return false
 	}
 	deltaLog.Debugf("ADS:%s: RESOURCE CHANGE previous resources: %v, new resources: %v %s %s", stype,
