@@ -315,15 +315,40 @@ func BuildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext
 	efKeys []string,
 	xdsCache model.XdsCache,
 ) ([]*route.VirtualHost, *discovery.Resource, *istio_route.Cache) {
-	var virtualServices []config.Config
-	var services []*model.Service
-
 	// Get the services from the egress listener.  When sniffing is enabled, we send
 	// route name as foo.bar.com:8080 which is going to match against the wildcard
 	// egress listener only. A route with sniffing would not have been generated if there
 	// was a sidecar with explicit port (and hence protocol declaration). A route with
 	// sniffing is generated only in the case of the catch all egress listener.
 	egressListener := node.SidecarScope.GetEgressListenerForRDS(listenerPort, routeName)
+	return buildSidecarOutboundVirtualHosts(node, push, routeName, listenerPort, efKeys, xdsCache, egressListener)
+}
+
+func BuildOnDemandSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext,
+	routeName string,
+	listenerPort int,
+	efKeys []string,
+	xdsCache model.XdsCache,
+) ([]*route.VirtualHost, *discovery.Resource, *istio_route.Cache) {
+	// Get the services from the egress listener.  When sniffing is enabled, we send
+	// route name as foo.bar.com:8080 which is going to match against the wildcard
+	// egress listener only. A route with sniffing would not have been generated if there
+	// was a sidecar with explicit port (and hence protocol declaration). A route with
+	// sniffing is generated only in the case of the catch all egress listener.
+	egressListener := node.OnDemandSidecarScope.GetEgressListenerForRDS(listenerPort, routeName)
+	return buildSidecarOutboundVirtualHosts(node, push, routeName, listenerPort, efKeys, xdsCache, egressListener)
+}
+
+func buildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext,
+	routeName string,
+	listenerPort int,
+	efKeys []string,
+	xdsCache model.XdsCache,
+	egressListener *model.IstioEgressListenerWrapper,
+) ([]*route.VirtualHost, *discovery.Resource, *istio_route.Cache) {
+	var virtualServices []config.Config
+	var services []*model.Service
+
 	// We should never be getting a nil egress listener because the code that setup this RDS
 	// call obviously saw an egress listener
 	if egressListener == nil {

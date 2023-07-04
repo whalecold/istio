@@ -77,7 +77,7 @@ func TestParseVirtualHostResourceName(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			port, name, domain, err := parseVirtualHostResourceName(tc.resourceName)
+			port, name, domain, err := ParseVirtualHostResourceName(tc.resourceName)
 			g.Expect(cmpError(err, tc.err)).To(gomega.Equal(""))
 			g.Expect(port).To(gomega.Equal(tc.port))
 			g.Expect(name).To(gomega.Equal(tc.name))

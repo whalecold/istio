@@ -33,14 +33,18 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	meshconfig "istio.io/api/mesh/v1alpha1"
+	networking "istio.io/api/networking/v1alpha3"
 	"istio.io/istio/pilot/pkg/features"
 	istionetworking "istio.io/istio/pilot/pkg/networking"
 	"istio.io/istio/pilot/pkg/trustbundle"
 	networkutil "istio.io/istio/pilot/pkg/util/network"
+	v3 "istio.io/istio/pilot/pkg/xds/v3"
 	"istio.io/istio/pkg/cluster"
+	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/constants"
 	"istio.io/istio/pkg/config/host"
 	"istio.io/istio/pkg/config/mesh"
+	"istio.io/istio/pkg/config/protocol"
 	"istio.io/istio/pkg/network"
 	"istio.io/istio/pkg/spiffe"
 	"istio.io/istio/pkg/util/identifier"
@@ -288,6 +292,11 @@ type Proxy struct {
 
 	// the sidecarScope associated with the proxy
 	SidecarScope *SidecarScope
+
+	// the OnDemandSidecarScope associated with the proxy and cut out by vhds.
+	OnDemandSidecarScope *SidecarScope
+	// PrevOnDemandSidecarScope...
+	PrevOnDemandSidecarScope *SidecarScope
 
 	// the sidecarScope associated with the proxy previously
 	PrevSidecarScope *SidecarScope
@@ -827,14 +836,230 @@ func (node *Proxy) ServiceNode() string {
 // as it needs the set of services for each listener port.
 func (node *Proxy) SetSidecarScope(ps *PushContext) {
 	sidecarScope := node.SidecarScope
+	onDemandSidecarScope := node.OnDemandSidecarScope
 
 	if node.Type == SidecarProxy {
 		node.SidecarScope = ps.getSidecarScope(node, node.Labels)
+		node.resetOnDemandSidecarScope(ps)
 	} else {
 		// Gateways should just have a default scope with egress: */*
 		node.SidecarScope = ps.getSidecarScope(node, nil)
 	}
 	node.PrevSidecarScope = sidecarScope
+	node.PrevOnDemandSidecarScope = onDemandSidecarScope
+}
+
+func (node *Proxy) resetOnDemandSidecarScope(ps *PushContext) {
+	if node.SidecarScope == nil {
+		return
+	}
+	res, ok := node.WatchedResources[v3.VirtualHostType]
+	if !ok || len(res.ResourceNames) == 0 {
+		node.OnDemandSidecarScope = node.SidecarScope
+		return
+	}
+
+	onDemandConfig := MergeSidecarByResources(node.SidecarScope, res.ResourceNames)
+
+	node.OnDemandSidecarScope = ConvertToSidecarScope(ps, onDemandConfig, node.ConfigNamespace)
+}
+
+func MergeSidecarByResources(sidecarScope *SidecarScope, resourceNames []string) *config.Config {
+	if sidecarScope == nil || sidecarScope.Sidecar == nil {
+		return nil
+	}
+	out := &config.Config{
+		Meta: config.Meta{
+			Name:      sidecarScope.Name,
+			Namespace: sidecarScope.SidecarNamespace,
+		},
+		Spec: sidecarScope.Sidecar,
+	}
+	derivedSidecar := &networking.Sidecar{
+		WorkloadSelector:      sidecarScope.Sidecar.WorkloadSelector,
+		Ingress:               sidecarScope.Sidecar.Ingress,
+		OutboundTrafficPolicy: sidecarScope.Sidecar.OutboundTrafficPolicy,
+	}
+	derivedSidecar.Egress = deriveSidecarEgress(sidecarScope.Sidecar.Egress, resourceNames, sidecarScope.Namespace)
+	out.Spec = derivedSidecar
+	return out
+}
+
+// ParseVirtualHostResourceName the format is routeName/domain:routeName
+func ParseVirtualHostResourceName(resourceName string) (int, string, string, error) {
+	// not support wildcard character
+	first := strings.IndexRune(resourceName, '/')
+	if first == -1 {
+		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
+	}
+	var vhdsName, vhdsDomain string
+	routeName := resourceName[:first]
+	last := strings.Index(resourceName, ":")
+	if last != -1 && first+1 >= last {
+		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
+	}
+	if last == -1 {
+		vhdsName = resourceName[first+1:]
+		vhdsDomain = resourceName[first+1:]
+	} else {
+		vhdsName = resourceName[first+1:]
+		vhdsDomain = resourceName[first+1 : last]
+	}
+	port, err := strconv.Atoi(routeName)
+	if err != nil {
+		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
+	}
+	// port vhdsName domain
+	return port, vhdsName, vhdsDomain, nil
+}
+
+func deriveSidecarEgress(egress []*networking.IstioEgressListener, resourceNames []string, configNamespace string) []*networking.IstioEgressListener {
+	routes := make(map[int][]string)
+	allDomains := make([]string, 0, len(resourceNames))
+	for _, r := range resourceNames {
+		port, _, domain, err := ParseVirtualHostResourceName(r)
+		if err != nil {
+			continue
+		}
+		routes[port] = append(routes[port], domain)
+		allDomains = append(allDomains, domain)
+	}
+
+	out := make([]*networking.IstioEgressListener, 0, len(egress))
+	for _, e := range egress {
+		if e.Port != nil && e.Port.Protocol != string(protocol.HTTP) {
+			// remian the none http protocol
+			out = append(out, e)
+			continue
+		}
+		// filter if the port is not exist in routes.
+		if _, ok := routes[int(e.Port.GetNumber())]; e.Port != nil && !ok {
+			continue
+		}
+		var hosts []string
+		if e.Port != nil {
+			hosts = getIntersectionHosts(e.Hosts, routes[int(e.Port.GetNumber())], configNamespace)
+		} else {
+			hosts = getIntersectionHosts(e.Hosts, allDomains, configNamespace)
+		}
+		if len(hosts) == 0 {
+			continue
+		}
+		out = append(out, &networking.IstioEgressListener{
+			Port:        e.Port,
+			Bind:        e.Bind,
+			CaptureMode: e.CaptureMode,
+			// should not modify the source data.
+			Hosts: hosts,
+		})
+	}
+	if len(out) == 0 {
+		out = append(out, &networking.IstioEgressListener{
+			Hosts: []string{denyAll},
+		})
+	}
+	return out
+}
+
+// getIntersectionHosts hosts is configured by sidecarScope cr, and the watchDomains is dynamically updated
+// by on-demand vhds. Hosts usually have a larger scope and some of them are not needed, watchDomains are
+// needed on fact, get the intersection of sets.
+func getIntersectionHosts(hosts []string, watchDomains []string, configNamespace string) []string {
+	if len(watchDomains) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(watchDomains))
+
+	allows := make(map[string]map[string]bool)
+	forbids := make(map[string]bool)
+	var allowAll bool
+	for _, host := range hosts {
+		// The value ~/* can be used to completely trim the configuration for
+		// sidecars that simply receive traffic and respond, but make no outbound
+		// connections of their own
+		if host == denyAll {
+			return []string{denyAll}
+		}
+
+		if host == "*/*" {
+			allowAll = true
+			break
+		}
+
+		parts := strings.Split(host, "/")
+		if len(parts) != 2 {
+			log.Errorf("illegal host in sidecar resource: %s, host must be of form namespace/dnsName", host)
+			continue
+		}
+
+		if parts[0] == currentNamespace {
+			parts[0] = configNamespace
+		}
+		if parts[0] == negativeNamespace {
+			forbids[parts[1]] = true
+			continue
+		}
+		svcs, ok := allows[parts[0]]
+		if !ok {
+			svcs = map[string]bool{}
+			allows[parts[0]] = svcs
+		}
+		svcs[parts[1]] = true
+	}
+
+	existHosts := map[string]bool{}
+
+	addHost := func(host string) {
+		if existHosts[host] {
+			return
+		}
+		existHosts[host] = true
+		out = append(out, host)
+	}
+
+DOMAINLOOP:
+	for _, domain := range watchDomains {
+		if idx := strings.Index(domain, ".svc."); idx != -1 {
+			domain = domain[:idx]
+		}
+		parts := strings.Split(domain, ".")
+		if len(parts) == 2 &&
+			!forbids[parts[0]] &&
+			(allowAll ||
+				allows[parts[1]][parts[0]] ||
+				allows[wildcardNamespace][parts[0]] ||
+				allows[parts[1]][wildcardNamespace]) {
+			addHost(fmt.Sprintf("%s/%s", parts[1], parts[0]))
+			continue
+		}
+
+		if forbids[domain] {
+			continue
+		}
+		// domain may be product as service or www.example.com as external service.
+		if allowAll ||
+			allows[currentNamespace][domain] ||
+			allows[wildcardNamespace][domain] ||
+			allows[currentNamespace][wildcardNamespace] {
+			// use wildcard namespace may not be accurate, but it not
+			// take negative effects.
+			addHost(fmt.Sprintf("*/%s", domain))
+			continue
+		}
+		for k := range allows[currentNamespace] {
+			if host.Name(domain).SubsetOf(host.Name(k)) {
+				addHost(fmt.Sprintf("*/%s", domain))
+				goto DOMAINLOOP
+			}
+		}
+		for k := range allows[wildcardNamespace] {
+			if host.Name(domain).SubsetOf(host.Name(k)) {
+				addHost(fmt.Sprintf("*/%s", domain))
+				break
+			}
+		}
+	}
+	return out
 }
 
 // SetGatewaysForProxy merges the Gateway objects associated with this

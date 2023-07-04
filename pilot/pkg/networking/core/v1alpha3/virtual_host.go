@@ -44,7 +44,7 @@ func classifyResourceByPort(resourceNames []string) (map[int][]*vhdsRequest, []s
 	vhdsRequests := make(map[int][]*vhdsRequest)
 	var deletedConfigurations model.DeletedResources
 	for _, resourceName := range resourceNames {
-		listenerPort, vhdsName, vhdsDomain, err := parseVirtualHostResourceName(resourceName)
+		listenerPort, vhdsName, vhdsDomain, err := ParseVirtualHostResourceName(resourceName)
 		if err != nil {
 			deletedConfigurations = append(deletedConfigurations, resourceName)
 			continue
@@ -84,7 +84,7 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 		var vhdsRequests map[int][]*vhdsRequest
 		vhdsRequests, deletedConfigurations, additionalInfo = classifyResourceByPort(resourceNames)
 		for port, reqs := range vhdsRequests {
-			vhds := buildSidecarOutboundVirtualHostsResource(node, req, port, reqs, efw, envoyfilterKeys)
+			vhds := buildVhdsSidecarOutboundVirtualHostsResource(node, req, port, reqs, efw, envoyfilterKeys)
 			if len(vhds) != 0 {
 				vhdsConfigurations = append(vhdsConfigurations, vhds...)
 			}
@@ -106,7 +106,7 @@ func generateVHDomains(node *model.Proxy, domain string, port int) []string {
 	return appendDomainPort(domains, domain, port)
 }
 
-func buildSidecarOutboundVirtualHosts(
+func buildVhdsSidecarOutboundVirtualHosts(
 	node *model.Proxy,
 	req *model.PushRequest,
 	listenerPort int,
@@ -115,7 +115,7 @@ func buildSidecarOutboundVirtualHosts(
 	routeName := strconv.Itoa(listenerPort)
 	// TODO use single function or reuse the old one.
 	// FIXME remove the vhds whose correspond route has been deleted.
-	vhosts, _, _ := BuildSidecarOutboundVirtualHosts(node, req.Push, routeName, listenerPort, efKeys, &model.DisabledCache{})
+	vhosts, _, _ := BuildOnDemandSidecarOutboundVirtualHosts(node, req.Push, routeName, listenerPort, efKeys, &model.DisabledCache{})
 	virtualHosts := make(map[string]*route.VirtualHost)
 	for _, vhds := range vhosts {
 		for _, domain := range vhds.Domains {
@@ -125,9 +125,9 @@ func buildSidecarOutboundVirtualHosts(
 	return virtualHosts
 }
 
-// buildSidecarOutboundVirtualHostsResource builds an outbound HTTP Route for sidecar.
+// buildVhdsSidecarOutboundVirtualHostsResource builds an outbound HTTP Route for sidecar.
 // Based on port, will determine all virtual hosts that listen on the port.
-func buildSidecarOutboundVirtualHostsResource(
+func buildVhdsSidecarOutboundVirtualHostsResource(
 	node *model.Proxy,
 	req *model.PushRequest,
 	listenerPort int,
@@ -137,7 +137,7 @@ func buildSidecarOutboundVirtualHostsResource(
 ) []*discovery.Resource {
 	routeName := strconv.Itoa(listenerPort)
 	out := make([]*discovery.Resource, 0, len(resources))
-	virtualHosts := buildSidecarOutboundVirtualHosts(node, req, listenerPort, efKeys)
+	virtualHosts := buildVhdsSidecarOutboundVirtualHosts(node, req, listenerPort, efKeys)
 
 	for _, resource := range resources {
 		// the domains of vhds always has the portless one, vhdsDomain is enough to query.
@@ -170,8 +170,8 @@ func buildSidecarOutboundVirtualHostsResource(
 	return out
 }
 
-// parseVirtualHostResourceName the format is routeName/domain:routeName
-func parseVirtualHostResourceName(resourceName string) (int, string, string, error) {
+// ParseVirtualHostResourceName the format is routeName/domain:routeName
+func ParseVirtualHostResourceName(resourceName string) (int, string, string, error) {
 	// not support wildcard character
 	first := strings.IndexRune(resourceName, '/')
 	if first == -1 {

@@ -33,6 +33,8 @@ import (
 const (
 	wildcardNamespace = "*"
 	currentNamespace  = "."
+	negativeNamespace = "~"
+	denyAll           = "~/*"
 	wildcardService   = host.Name("*")
 )
 
@@ -76,6 +78,8 @@ type SidecarScope struct {
 	// The crd itself. Can be nil if we are constructing the default
 	// sidecar scope
 	Sidecar *networking.Sidecar
+	// This is the namespace where sidecarConfig resides.
+	SidecarNamespace string
 
 	// Version this sidecar was computed for
 	Version string
@@ -263,6 +267,7 @@ func ConvertToSidecarScope(ps *PushContext, sidecarConfig *config.Config, config
 	sidecar := sidecarConfig.Spec.(*networking.Sidecar)
 	out := &SidecarScope{
 		Name:               sidecarConfig.Name,
+		SidecarNamespace:   sidecarConfig.Namespace,
 		Namespace:          configNamespace,
 		Sidecar:            sidecar,
 		configDependencies: make(map[ConfigHash]struct{}),
