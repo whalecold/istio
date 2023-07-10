@@ -32,6 +32,7 @@ import (
 
 const (
 	wildcardNamespace = "*"
+	wildcarDomain     = "*"
 	currentNamespace  = "."
 	negativeNamespace = "~"
 	denyAll           = "~/*"

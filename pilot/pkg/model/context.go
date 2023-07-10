@@ -1028,7 +1028,7 @@ DOMAINLOOP:
 			(allowAll ||
 				allows[parts[1]][parts[0]] ||
 				allows[wildcardNamespace][parts[0]] ||
-				allows[parts[1]][wildcardNamespace]) {
+				allows[parts[1]][wildcarDomain]) {
 			addHost(fmt.Sprintf("%s/%s", parts[1], parts[0]))
 			continue
 		}
@@ -1040,7 +1040,7 @@ DOMAINLOOP:
 		if allowAll ||
 			allows[currentNamespace][domain] ||
 			allows[wildcardNamespace][domain] ||
-			allows[currentNamespace][wildcardNamespace] {
+			allows[currentNamespace][wildcarDomain] {
 			// use wildcard namespace may not be accurate, but it not
 			// take negative effects.
 			addHost(fmt.Sprintf("*/%s", domain))
