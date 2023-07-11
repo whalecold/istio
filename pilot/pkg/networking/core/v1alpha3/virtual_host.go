@@ -40,8 +40,8 @@ type vhdsRequest struct {
 }
 
 // classifyResourceByPort classify the vhds resource, treat the resource as deleted if parse failed.
-func classifyResourceByPort(resourceNames []string) (map[int][]*vhdsRequest, []string, string) {
-	vhdsRequests := make(map[int][]*vhdsRequest)
+func classifyResourceByPort(resourceNames []string) (map[int]map[string]*vhdsRequest, []string, string) {
+	vhdsRequests := make(map[int]map[string]*vhdsRequest)
 	var deletedConfigurations model.DeletedResources
 	for _, resourceName := range resourceNames {
 		listenerPort, vhdsName, vhdsDomain, err := ParseVirtualHostResourceName(resourceName)
@@ -49,11 +49,16 @@ func classifyResourceByPort(resourceNames []string) (map[int][]*vhdsRequest, []s
 			deletedConfigurations = append(deletedConfigurations, resourceName)
 			continue
 		}
-		vhdsRequests[listenerPort] = append(vhdsRequests[listenerPort], &vhdsRequest{
+		vs := vhdsRequests[listenerPort]
+		if vs == nil {
+			vs = make(map[string]*vhdsRequest)
+			vhdsRequests[listenerPort] = vs
+		}
+		vs[vhdsDomain] = &vhdsRequest{
 			resourceName: resourceName,
 			vhdsName:     vhdsName,
 			vhdsDomain:   vhdsDomain,
-		})
+		}
 	}
 	if len(deletedConfigurations) != 0 {
 		return vhdsRequests, deletedConfigurations, fmt.Sprintf("invalid resource names: %s", strings.Join(deletedConfigurations, "|"))
@@ -81,7 +86,7 @@ func (configgen *ConfigGeneratorImpl) BuildVirtualHosts(
 			networkingv1alpha3.EnvoyFilter_HTTP_ROUTE,
 		)
 
-		var vhdsRequests map[int][]*vhdsRequest
+		var vhdsRequests map[int]map[string]*vhdsRequest
 		vhdsRequests, deletedConfigurations, additionalInfo = classifyResourceByPort(resourceNames)
 		for port, reqs := range vhdsRequests {
 			vhds := buildVhdsSidecarOutboundVirtualHostsResource(node, req, port, reqs, efw, envoyfilterKeys)
@@ -110,12 +115,13 @@ func buildVhdsSidecarOutboundVirtualHosts(
 	node *model.Proxy,
 	req *model.PushRequest,
 	listenerPort int,
+	resources map[string]*vhdsRequest,
 	efKeys []string,
 ) map[string]*route.VirtualHost {
 	routeName := strconv.Itoa(listenerPort)
 	// TODO use single function or reuse the old one.
 	// FIXME remove the vhds whose correspond route has been deleted.
-	vhosts, _, _ := BuildOnDemandSidecarOutboundVirtualHosts(node, req.Push, routeName, listenerPort, efKeys, &model.DisabledCache{})
+	vhosts, _, _ := BuildOnDemandSidecarOutboundVirtualHosts(node, req.Push, routeName, listenerPort, resources, efKeys)
 	virtualHosts := make(map[string]*route.VirtualHost)
 	for _, vhds := range vhosts {
 		for _, domain := range vhds.Domains {
@@ -131,13 +137,13 @@ func buildVhdsSidecarOutboundVirtualHostsResource(
 	node *model.Proxy,
 	req *model.PushRequest,
 	listenerPort int,
-	resources []*vhdsRequest,
+	resources map[string]*vhdsRequest,
 	efw *model.EnvoyFilterWrapper,
 	efKeys []string,
 ) []*discovery.Resource {
 	routeName := strconv.Itoa(listenerPort)
 	out := make([]*discovery.Resource, 0, len(resources))
-	virtualHosts := buildVhdsSidecarOutboundVirtualHosts(node, req, listenerPort, efKeys)
+	virtualHosts := buildVhdsSidecarOutboundVirtualHosts(node, req, listenerPort, resources, efKeys)
 
 	for _, resource := range resources {
 		// the domains of vhds always has the portless one, vhdsDomain is enough to query.

@@ -321,14 +321,19 @@ func BuildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext
 	// was a sidecar with explicit port (and hence protocol declaration). A route with
 	// sniffing is generated only in the case of the catch all egress listener.
 	egressListener := node.SidecarScope.GetEgressListenerForRDS(listenerPort, routeName)
-	return buildSidecarOutboundVirtualHosts(node, push, routeName, listenerPort, efKeys, xdsCache, egressListener)
+	// We should never be getting a nil egress listener because the code that setup this RDS
+	// call obviously saw an egress listener
+	if egressListener == nil {
+		return nil, nil, nil
+	}
+	return buildSidecarOutboundVirtualHosts(node, push, routeName, listenerPort, efKeys, egressListener, egressListener.Services(), xdsCache)
 }
 
 func BuildOnDemandSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext,
 	routeName string,
 	listenerPort int,
+	resources map[string]*vhdsRequest,
 	efKeys []string,
-	xdsCache model.XdsCache,
 ) ([]*route.VirtualHost, *discovery.Resource, *istio_route.Cache) {
 	// Get the services from the egress listener.  When sniffing is enabled, we send
 	// route name as foo.bar.com:8080 which is going to match against the wildcard
@@ -336,29 +341,41 @@ func BuildOnDemandSidecarOutboundVirtualHosts(node *model.Proxy, push *model.Pus
 	// was a sidecar with explicit port (and hence protocol declaration). A route with
 	// sniffing is generated only in the case of the catch all egress listener.
 	egressListener := node.OnDemandSidecarScope.GetEgressListenerForRDS(listenerPort, routeName)
-	return buildSidecarOutboundVirtualHosts(node, push, routeName, listenerPort, efKeys, xdsCache, egressListener)
+	// We should never be getting a nil egress listener because the code that setup this RDS
+	// call obviously saw an egress listener
+	if egressListener == nil {
+		return nil, nil, nil
+	}
+	services := filterServicesWithHosts(egressListener.Services(), resources)
+	return buildSidecarOutboundVirtualHosts(node, push, routeName, listenerPort, efKeys, egressListener, services, &model.DisabledCache{})
+}
+
+// filterServicesWithHosts filters the useless service.
+func filterServicesWithHosts(services []*model.Service, hosts map[string]*vhdsRequest) []*model.Service {
+	if len(hosts) == 0 {
+		return services
+	}
+	out := make([]*model.Service, 0, len(services))
+	for _, svc := range services {
+		if _, ok := hosts[svc.Hostname.String()]; ok {
+			out = append(out, svc.DeepCopy())
+		}
+	}
+	return out
 }
 
 func buildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext,
 	routeName string,
 	listenerPort int,
 	efKeys []string,
-	xdsCache model.XdsCache,
 	egressListener *model.IstioEgressListenerWrapper,
+	services []*model.Service,
+	xdsCache model.XdsCache,
 ) ([]*route.VirtualHost, *discovery.Resource, *istio_route.Cache) {
-	var virtualServices []config.Config
-	var services []*model.Service
 
-	// We should never be getting a nil egress listener because the code that setup this RDS
-	// call obviously saw an egress listener
-	if egressListener == nil {
-		return nil, nil, nil
-	}
-
-	services = egressListener.Services()
 	// To maintain correctness, we should only use the virtualservices for
 	// this listener and not all virtual services accessible to this proxy.
-	virtualServices = egressListener.VirtualServices()
+	virtualServices := egressListener.VirtualServices()
 
 	// When generating RDS for ports created via the SidecarScope, we treat ports as HTTP proxy style ports
 	// if ports protocol is HTTP_PROXY.
@@ -419,6 +436,7 @@ func buildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext
 	}
 
 	// This is hack to keep consistent with previous behavior.
+	// TODO why not perform the select function when port is equal with 80.
 	if listenerPort != 80 {
 		// only select virtualServices that matches a service
 		virtualServices = selectVirtualServices(virtualServices, servicesByName)
