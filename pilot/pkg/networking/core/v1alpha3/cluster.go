@@ -88,11 +88,7 @@ func (configgen *ConfigGeneratorImpl) BuildClusters(proxy *model.Proxy, req *mod
 	if features.FilterGatewayClusterConfig && proxy.Type == model.Router {
 		services = req.Push.GatewayServices(proxy)
 	} else {
-		if proxy.OnDemandSidecarScope != nil {
-			services = proxy.OnDemandSidecarScope.Services()
-		} else {
-			services = proxy.SidecarScope.Services()
-		}
+		services = proxy.SidecarScope.Services()
 	}
 	return configgen.buildClusters(proxy, req, services)
 }
@@ -114,6 +110,35 @@ func copyServiceWithPortFilter(svc *model.Service, ports map[int]bool) *model.Se
 	return out
 }
 
+func (configgen *ConfigGeneratorImpl) buildDeltaClusters(proxy *model.Proxy, updates *model.PushRequest,
+	watched *model.WatchedResource,
+) ([]*discovery.Resource, model.XdsLogDetails) {
+	var services []*model.Service
+	serviceHosts := make(map[host.Name]map[int]bool)
+	for _, cluster := range watched.ResourceNames {
+		// WatchedResources.ResourceNames will contain the names of the clusters it is subscribed to. We can
+		// check with the name of our service (cluster names are in the format outbound|<port>||<hostname>).
+		_, _, svcHost, port := model.ParseSubsetKey(cluster)
+		if svcHost == "" {
+			continue
+		}
+		ports := serviceHosts[svcHost]
+		if ports == nil {
+			ports = make(map[int]bool)
+			serviceHosts[svcHost] = ports
+		}
+		ports[port] = true
+	}
+
+	for svcHost, ports := range serviceHosts {
+		service := copyServiceWithPortFilter(updates.Push.ServiceForHostname(proxy, svcHost), ports)
+		if service != nil {
+			services = append(services, service)
+		}
+	}
+	return configgen.buildClusters(proxy, updates, services)
+}
+
 // BuildDeltaClusters generates the deltas (add and delete) for a given proxy. Currently, only service changes are reflected with deltas.
 // Otherwise, we fall back onto generating everything.
 func (configgen *ConfigGeneratorImpl) BuildDeltaClusters(proxy *model.Proxy, updates *model.PushRequest,
@@ -122,31 +147,7 @@ func (configgen *ConfigGeneratorImpl) BuildDeltaClusters(proxy *model.Proxy, upd
 	// if we can't use delta, fall back to generate all
 	if !shouldUseDelta(updates) {
 		if proxy.OnDemandEnable {
-			var services []*model.Service
-			serviceHosts := make(map[host.Name]map[int]bool)
-			for _, cluster := range watched.ResourceNames {
-				// WatchedResources.ResourceNames will contain the names of the clusters it is subscribed to. We can
-				// check with the name of our service (cluster names are in the format outbound|<port>||<hostname>).
-				_, _, svcHost, port := model.ParseSubsetKey(cluster)
-				if svcHost == "" {
-					continue
-				}
-				ports := serviceHosts[svcHost]
-				if ports == nil {
-					ports = make(map[int]bool)
-					serviceHosts[svcHost] = ports
-				}
-				ports[port] = true
-			}
-
-			for svcHost, ports := range serviceHosts {
-				service := copyServiceWithPortFilter(updates.Push.ServiceForHostname(proxy, svcHost), ports)
-				if service != nil {
-					services = append(services, service)
-				}
-			}
-
-			cl, lg := configgen.buildClusters(proxy, updates, services)
+			cl, lg := configgen.buildDeltaClusters(proxy, updates, watched)
 			return cl, nil, lg, false
 		}
 		cl, lg := configgen.BuildClusters(proxy, updates)
