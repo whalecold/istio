@@ -88,7 +88,11 @@ func (configgen *ConfigGeneratorImpl) BuildClusters(proxy *model.Proxy, req *mod
 	if features.FilterGatewayClusterConfig && proxy.Type == model.Router {
 		services = req.Push.GatewayServices(proxy)
 	} else {
-		services = proxy.SidecarScope.Services()
+		if proxy.OnDemandSidecarScope != nil {
+			services = proxy.OnDemandSidecarScope.Services()
+		} else {
+			services = proxy.SidecarScope.Services()
+		}
 	}
 	return configgen.buildClusters(proxy, req, services)
 }

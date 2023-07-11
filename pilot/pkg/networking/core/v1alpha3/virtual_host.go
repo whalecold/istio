@@ -148,6 +148,7 @@ func buildVhdsSidecarOutboundVirtualHostsResource(
 			node, efw, routeName, virtualHost) {
 			// If the vhds is removed by envoyfilter or not found, build up with the default policy.
 			// FIXME: how to distinguish the virtualHost is external or should be deleted.
+			// TODO: merge all default policy host to one vhds configuration
 			virtualHost = buildVirtualHostWithDefaultPolicy(node, resource.vhdsName, domains)
 		} else {
 			// Only unique values for domains are permitted set in one route.
