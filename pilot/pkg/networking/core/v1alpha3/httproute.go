@@ -326,7 +326,7 @@ func BuildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext
 	if egressListener == nil {
 		return nil, nil, nil
 	}
-	return buildSidecarOutboundVirtualHosts(node, push, routeName, listenerPort, efKeys, egressListener, egressListener.Services(), xdsCache)
+	return buildSidecarOutboundVirtualHosts(node, push, routeName, listenerPort, efKeys, egressListener, xdsCache)
 }
 
 func BuildOnDemandSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext,
@@ -346,8 +346,7 @@ func BuildOnDemandSidecarOutboundVirtualHosts(node *model.Proxy, push *model.Pus
 	if egressListener == nil {
 		return nil, nil, nil
 	}
-	services := filterServicesWithHosts(egressListener.Services(), resources)
-	return buildSidecarOutboundVirtualHosts(node, push, routeName, listenerPort, efKeys, egressListener, services, &model.DisabledCache{})
+	return buildSidecarOutboundVirtualHosts(node, push, routeName, listenerPort, efKeys, egressListener, &model.DisabledCache{})
 }
 
 // filterServicesWithHosts filters the useless service.
@@ -369,10 +368,10 @@ func buildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext
 	listenerPort int,
 	efKeys []string,
 	egressListener *model.IstioEgressListenerWrapper,
-	services []*model.Service,
 	xdsCache model.XdsCache,
 ) ([]*route.VirtualHost, *discovery.Resource, *istio_route.Cache) {
 
+	services := egressListener.Services()
 	// To maintain correctness, we should only use the virtualservices for
 	// this listener and not all virtual services accessible to this proxy.
 	virtualServices := egressListener.VirtualServices()
