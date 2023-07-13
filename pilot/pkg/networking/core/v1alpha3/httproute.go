@@ -170,7 +170,28 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 	var routeCache *istio_route.Cache
 	var resource *discovery.Resource
 
+	out := &route.RouteConfiguration{
+		Name:             routeName,
+		ValidateClusters: proto.BoolFalse,
+	}
+
+	if SidecarIgnorePort(node) {
+		out.IgnorePortInHostMatching = true
+	}
+
+	if node.OnDemandEnable && !useSniffing {
+		out.Vhds = vhdsConfiguration()
+		// apply envoy filter patches
+		out = envoyfilter.ApplyRouteConfigurationPatches(networking.EnvoyFilter_SIDECAR_OUTBOUND, node, efw, out)
+		resource = &discovery.Resource{
+			Name:     out.Name,
+			Resource: protoconv.MessageToAny(out),
+		}
+		return resource, false
+	}
+
 	cacheHit := false
+
 	if useSniffing && listenerPort != 0 {
 		// Check if we have already computed the list of all virtual hosts for this port
 		// If so, then  we simply have to return only the relevant virtual hosts for
@@ -204,20 +225,7 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 		virtualHosts = append(virtualHosts, buildCatchAllVirtualHost(node))
 	}
 
-	out := &route.RouteConfiguration{
-		Name:             routeName,
-		ValidateClusters: proto.BoolFalse,
-	}
-
-	if node.OnDemandEnable && !useSniffing {
-		out.Vhds = vhdsConfiguration()
-	} else {
-		out.VirtualHosts = virtualHosts
-	}
-
-	if SidecarIgnorePort(node) {
-		out.IgnorePortInHostMatching = true
-	}
+	out.VirtualHosts = virtualHosts
 
 	// apply envoy filter patches
 	out = envoyfilter.ApplyRouteConfigurationPatches(networking.EnvoyFilter_SIDECAR_OUTBOUND, node, efw, out)
