@@ -293,7 +293,7 @@ func (b *EndpointBuilder) buildLocalityLbEndpointsFromShards(
 			// client proxy supports HBONE or not. This breaks the cache.
 			// For now, just disable caching if the global HBONE flag is enabled.
 			if ep.EnvoyEndpoint == nil || features.EnableHBONE {
-				ep.EnvoyEndpoint = buildEnvoyLbEndpoint(b, b.proxy.IsProxylessGrpc(), ep)
+				ep.EnvoyEndpoint = buildEnvoyLbEndpoint(b.proxy.IsProxylessGrpc(), ep)
 			}
 			// detect if mTLS is possible for this endpoint, used later during ep filtering
 			// this must be done while converting IstioEndpoints because we still have workload labels
@@ -353,13 +353,10 @@ func (b *EndpointBuilder) createClusterLoadAssignment(llbOpts []*LocalityEndpoin
 	}
 }
 
-const sidecarInboundPort = "service.sidecar.istio.io/endpointPort"
+const sidecarInboundPort = "service.sidecar.istio.io/exposedInboundPort"
 
-func getEnvoyLbEndpointPort(b *EndpointBuilder, e *model.IstioEndpoint) uint32 {
-	if b == nil || b.service == nil {
-		return e.EndpointPort
-	}
-	val, ok := b.service.Attributes.Labels[sidecarInboundPort]
+func getEnvoyLbEndpointPort(e *model.IstioEndpoint) uint32 {
+	val, ok := e.Labels[sidecarInboundPort]
 	if !ok {
 		return e.EndpointPort
 	}
@@ -372,7 +369,7 @@ func getEnvoyLbEndpointPort(b *EndpointBuilder, e *model.IstioEndpoint) uint32 {
 
 // buildEnvoyLbEndpoint packs the endpoint based on istio info.
 func buildEnvoyLbEndpoint(b *EndpointBuilder, proxyless bool, e *model.IstioEndpoint) *endpoint.LbEndpoint {
-	addr := util.BuildAddress(e.Address, getEnvoyLbEndpointPort(b, e))
+	addr := util.BuildAddress(e.Address, getEnvoyLbEndpointPort(e))
 	healthStatus := core.HealthStatus_HEALTHY
 	// This is enabled by features.SendUnhealthyEndpoints - otherwise they are not tracked.
 	if e.HealthStatus == model.UnHealthy {

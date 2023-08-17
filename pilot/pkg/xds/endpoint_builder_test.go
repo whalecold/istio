@@ -244,21 +244,11 @@ func TestPopulateFailoverPriorityLabels(t *testing.T) {
 
 func TestGetEnvoyLbEndpointPort(t *testing.T) {
 	tests := []struct {
-		b    *EndpointBuilder
 		e    *model.IstioEndpoint
 		name string
 		port uint32
 	}{
 		{
-			nil,
-			&model.IstioEndpoint{
-				EndpointPort: 80,
-			},
-			"nil",
-			80,
-		},
-		{
-			&EndpointBuilder{},
 			&model.IstioEndpoint{
 				EndpointPort: 80,
 			},
@@ -266,33 +256,21 @@ func TestGetEnvoyLbEndpointPort(t *testing.T) {
 			80,
 		},
 		{
-			&EndpointBuilder{
-				service: &model.Service{
-					Attributes: model.ServiceAttributes{
-						Labels: map[string]string{
-							sidecarInboundPort: "port",
-						},
-					},
-				},
-			},
 			&model.IstioEndpoint{
 				EndpointPort: 80,
+				Labels: map[string]string{
+					sidecarInboundPort: "port",
+				},
 			},
 			"string",
 			80,
 		},
 		{
-			&EndpointBuilder{
-				service: &model.Service{
-					Attributes: model.ServiceAttributes{
-						Labels: map[string]string{
-							sidecarInboundPort: "16000",
-						},
-					},
-				},
-			},
 			&model.IstioEndpoint{
 				EndpointPort: 80,
+				Labels: map[string]string{
+					sidecarInboundPort: "16000",
+				},
 			},
 			"int",
 			16000,
@@ -301,7 +279,7 @@ func TestGetEnvoyLbEndpointPort(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			port := getEnvoyLbEndpointPort(tt.b, tt.e)
+			port := getEnvoyLbEndpointPort(tt.e)
 			if port != tt.port {
 				t.Fatalf("expected port %v but got %v", tt.port, port)
 			}
