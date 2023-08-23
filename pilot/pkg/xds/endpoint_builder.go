@@ -41,8 +41,9 @@ import (
 )
 
 var (
-	Separator = []byte{'~'}
-	Slash     = []byte{'/'}
+	Separator           = []byte{'~'}
+	Slash               = []byte{'/'}
+	sidecarEndpointPort = "sidecar.istio.io/exposed-endpoint-port"
 )
 
 type EndpointBuilder struct {
@@ -353,9 +354,21 @@ func (b *EndpointBuilder) createClusterLoadAssignment(llbOpts []*LocalityEndpoin
 	}
 }
 
+func getEnvoyLbEndpointPort(e *model.IstioEndpoint) uint32 {
+	val, ok := e.Labels[sidecarEndpointPort]
+	if !ok {
+		return e.EndpointPort
+	}
+	port, err := strconv.Atoi(val)
+	if err != nil {
+		return e.EndpointPort
+	}
+	return uint32(port)
+}
+
 // buildEnvoyLbEndpoint packs the endpoint based on istio info.
 func buildEnvoyLbEndpoint(proxyless bool, e *model.IstioEndpoint) *endpoint.LbEndpoint {
-	addr := util.BuildAddress(e.Address, e.EndpointPort)
+	addr := util.BuildAddress(e.Address, getEnvoyLbEndpointPort(e))
 	healthStatus := core.HealthStatus_HEALTHY
 	// This is enabled by features.SendUnhealthyEndpoints - otherwise they are not tracked.
 	if e.HealthStatus == model.UnHealthy {

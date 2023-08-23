@@ -241,3 +241,48 @@ func TestPopulateFailoverPriorityLabels(t *testing.T) {
 		})
 	}
 }
+
+func TestGetEnvoyLbEndpointPort(t *testing.T) {
+	tests := []struct {
+		e    *model.IstioEndpoint
+		name string
+		port uint32
+	}{
+		{
+			&model.IstioEndpoint{
+				EndpointPort: 80,
+			},
+			"none",
+			80,
+		},
+		{
+			&model.IstioEndpoint{
+				EndpointPort: 80,
+				Labels: map[string]string{
+					sidecarEndpointPort: "port",
+				},
+			},
+			"string",
+			80,
+		},
+		{
+			&model.IstioEndpoint{
+				EndpointPort: 80,
+				Labels: map[string]string{
+					sidecarEndpointPort: "16000",
+				},
+			},
+			"int",
+			16000,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			port := getEnvoyLbEndpointPort(tt.e)
+			if port != tt.port {
+				t.Fatalf("expected port %v but got %v", tt.port, port)
+			}
+		})
+	}
+}

@@ -185,7 +185,8 @@ func (c *Controller) List(kind config.GroupVersionKind, namespace string) ([]con
 	}
 	if c.namespacesFilter != nil {
 		var out []config.Config
-		for _, config := range configs {
+		for idx := range configs {
+			config := configs[idx]
 			if c.namespacesFilter(&config) {
 				out = append(out, config)
 			}
