@@ -433,8 +433,16 @@ func ExtractBearerToken(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("no bearer token exists in HTTP authorization header")
 }
 
+func ExtractRequestHeaderKey(req *http.Request, key string) string {
+	value := req.Header.Get(key)
+	if value != "" {
+		return value
+	}
+	return req.Header.Get(http.CanonicalHeaderKey(key))
+}
+
 func ExtractRequestToken(req *http.Request) (string, error) {
-	value := req.Header.Get(authorizationMeta)
+	value := ExtractRequestHeaderKey(req, authorizationMeta)
 	if value == "" {
 		return "", fmt.Errorf("no HTTP authorization header exists")
 	}
