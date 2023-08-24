@@ -100,7 +100,7 @@ func (a *KubeJWTAuthenticator) authenticateHTTP(req *http.Request) (*security.Ca
 	if err != nil {
 		return nil, fmt.Errorf("target JWT extraction error: %v", err)
 	}
-	clusterID := cluster.ID(req.Header.Get(clusterIDMeta))
+	clusterID := cluster.ID(security.ExtractRequestHeaderKey(req, clusterIDMeta))
 	return a.authenticate(targetJWT, clusterID)
 }
 
