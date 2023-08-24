@@ -1,0 +1,11 @@
+FROM hub.byted.org/infcplibrary/golang:1.19.5-security-auth as builder
+COPY . /work
+WORKDIR /work
+ENV BUILD_WITH_CONTAINER 0
+COPY gitconfig /etc/gitconfig
+ARG CODEBASE
+ENV GIT_SSH_COMMAND $CODEBASE
+RUN make build-pilot
+
+FROM hub.byted.org/istio/pilot:1.16.3
+COPY --from=builder /work/out/linux_amd64/pilot-discovery /usr/local/bin/pilot-discovery

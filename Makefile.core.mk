@@ -475,3 +475,4 @@ include tools/packaging/packaging.mk
 include tests/integration/tests.mk
 
 include common/Makefile.common.mk
+include Makefile.mse.mk
