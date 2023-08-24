@@ -1,0 +1,17 @@
+FROM hub.byted.org/infcplibrary/golang:1.19.5-security-auth as builder
+COPY . /work
+WORKDIR /work
+ENV BUILD_WITH_CONTAINER 0
+
+COPY gitconfig /etc/gitconfig
+ARG CODEBASE
+ENV GIT_SSH_COMMAND $CODEBASE
+
+RUN make build-agent
+# Envoy Release Notes: https://bytedance.feishu.cn/wiki/wikcnBMmw3f4JEKyPMV0CO6YSfe
+ADD https://mse.tos-cn-beijing.volces.com/envoy%2Fc37284e5%2Fenvoy-Linux-x86_64.tar.gz envoy.tar.gz
+RUN tar -xzf envoy.tar.gz
+
+FROM hub.byted.org/istio/proxyv2:1.16.3
+COPY --from=builder /work/out/linux_amd64/pilot-agent  /usr/local/bin/pilot-agent
+COPY --from=builder /work/envoy  /usr/local/bin/envoy
