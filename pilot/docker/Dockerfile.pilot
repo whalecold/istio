@@ -1,3 +1,5 @@
+FROM hub.byted.org/release/mse-tools:latest as msetools
+
 # BASE_DISTRIBUTION is used to switch between the old base distribution and distroless base images
 ARG BASE_DISTRIBUTION=debug
 
@@ -16,6 +18,9 @@ FROM ${BASE_DISTRIBUTION:-debug}
 
 ARG TARGETARCH
 COPY ${TARGETARCH:-amd64}/pilot-discovery /usr/local/bin/pilot-discovery
+
+ENV DISABLE_PORTFORWARD true
+COPY --from=msetools /app/mse-tools /usr/local/bin/mse-tools
 
 # Copy templates for bootstrap generation.
 COPY envoy_bootstrap.json /var/lib/istio/envoy/envoy_bootstrap_tmpl.json
