@@ -66,7 +66,7 @@ func (s *Server) CreateCertificate(ctx context.Context, request *pb.IstioCertifi
 	caller := am.Authenticate(ctx)
 	if caller == nil {
 		s.monitoring.AuthnError.Increment()
-		return nil, status.Error(codes.Unauthenticated, "request authenticate failure")
+		return nil, status.Error(codes.Unauthenticated, am.FailedMessages())
 	}
 	// TODO: Call authorizer.
 	crMetadata := request.Metadata.GetFields()
