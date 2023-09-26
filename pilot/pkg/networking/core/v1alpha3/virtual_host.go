@@ -120,7 +120,7 @@ func buildVhdsSidecarOutboundVirtualHosts(
 ) map[string]*route.VirtualHost {
 	routeName := strconv.Itoa(listenerPort)
 	// TODO use single function or reuse the old one.
-	// FIXME remove the vhds whose correspond route has been deleted.
+	// FIXME remove the vhds whose corresponding route has been deleted.
 	vhosts, _, _ := BuildOnDemandSidecarOutboundVirtualHosts(node, req.Push, routeName, listenerPort, resources, efKeys)
 	virtualHosts := make(map[string]*route.VirtualHost)
 	for _, vhds := range vhosts {
@@ -177,10 +177,11 @@ func buildVhdsSidecarOutboundVirtualHostsResource(
 	return out
 }
 
-// ParseVirtualHostResourceName the format is routeName/domain:routeName
+// ParseVirtualHostResourceName the format is routeName/domain:port
+// routeName is the same as port in the context of istio.
 func ParseVirtualHostResourceName(resourceName string) (int, string, string, error) {
 	// not support wildcard character
-	first := strings.IndexRune(resourceName, '/')
+	first := strings.LastIndexByte(resourceName, '/')
 	if first == -1 {
 		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
 	}
@@ -201,7 +202,7 @@ func ParseVirtualHostResourceName(resourceName string) (int, string, string, err
 	if err != nil {
 		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
 	}
-	// port vhdsName domain
+	// port, request host, host domain name.
 	return port, vhdsName, vhdsDomain, nil
 }
 

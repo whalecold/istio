@@ -341,6 +341,7 @@ func BuildOnDemandSidecarOutboundVirtualHosts(node *model.Proxy, push *model.Pus
 	resources map[string]*vhdsRequest,
 	efKeys []string,
 ) ([]*route.VirtualHost, *discovery.Resource, *istio_route.Cache) {
+	// TODO, checkout the sniffing logic conflict
 	// Get the services from the egress listener.  When sniffing is enabled, we send
 	// route name as foo.bar.com:8080 which is going to match against the wildcard
 	// egress listener only. A route with sniffing would not have been generated if there
@@ -502,7 +503,6 @@ func buildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext
 				Name:                       name,
 				Domains:                    domains,
 				Routes:                     vhwrapper.Routes,
-				TypedPerFilterConfig:       typedConfigs,
 				IncludeRequestAttemptCount: true,
 			}
 		}
