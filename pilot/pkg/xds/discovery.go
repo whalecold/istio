@@ -572,6 +572,7 @@ func (s *DiscoveryServer) InitGenerators(env *model.Environment, systemNameSpace
 	s.Generators[v3.NameTableType] = &NdsGenerator{Server: s}
 	s.Generators[v3.ExtensionConfigurationType] = &EcdsGenerator{Server: s}
 	s.Generators[v3.ProxyConfigType] = &PcdsGenerator{Server: s, TrustBundle: env.TrustBundle}
+	s.Generators[v3.ServiceInstancesType] = &SidsGenerator{Server: s}
 
 	s.Generators["grpc"] = &grpcgen.GrpcConfigGenerator{}
 	s.Generators["grpc/"+v3.EndpointType] = edsGen
