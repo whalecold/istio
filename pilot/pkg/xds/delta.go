@@ -293,6 +293,7 @@ func (s *DiscoveryServer) processDeltaRequest(req *discovery.DeltaDiscoveryReque
 		// we may end up overriding active cache entries with stale ones.
 		Start: con.proxy.LastPushTime,
 		Delta: model.ResourceDelta{
+			TypeUrl:      req.TypeUrl,
 			Subscribed:   sets.New(req.ResourceNamesSubscribe...),
 			Unsubscribed: sets.New(req.ResourceNamesUnsubscribe...),
 		},
@@ -300,7 +301,10 @@ func (s *DiscoveryServer) processDeltaRequest(req *discovery.DeltaDiscoveryReque
 	// SidecarScope for the proxy may has not been updated based on this pushContext.
 	// It can happen when `processRequest` comes after push context has been updated(s.initPushContext),
 	// but before proxy's SidecarScope has been updated(s.updateProxy).
-	if con.proxy.SidecarScope != nil && con.proxy.SidecarScope.Version != request.Push.PushVersion {
+	if con.proxy.SidecarScope != nil && con.proxy.SidecarScope.Version != request.Push.PushVersion ||
+		// Trigger recompute proxy state when VHDS subscription changes so that the sidecarScope of proxy
+		// can be re-trimmed based on the updated VHDS subscription list.
+		request.Delta.TypeUrl == v3.VirtualHostType && !request.Delta.IsEmpty() {
 		s.computeProxyState(con.proxy, request)
 	}
 	return s.pushDeltaXds(con, con.Watched(req.TypeUrl), request)
@@ -378,7 +382,6 @@ func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery
 	// If it comes here, that means nonce match. This an ACK. We should record
 	// the ack details and respond if there is a change in resource names.
 	con.proxy.Lock()
-	// TODO vhds has wildcard char *, should delete it.
 	previousResources := con.proxy.WatchedResources[request.TypeUrl].ResourceNames
 	deltaResources := deltaWatchedResources(previousResources, request)
 	con.proxy.WatchedResources[request.TypeUrl].NonceAcked = request.ResponseNonce
@@ -436,9 +439,10 @@ func (s *DiscoveryServer) pushDeltaXds(con *Connection,
 	originalW := w
 	// If delta is set, client is requesting new resources or removing old ones. We should just generate the
 	// new resources it needs, rather than the entire set of known resources.
-	// Note: we do not need to account for unsubscribed resources as these are handled by parent removal;
+	// NOTE: we do not need to account for unsubscribed resources as these are handled by parent removal;
 	// See https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol#deleting-resources.
 	// This means if there are only removals, we will not respond.
+	// TODO(wangjian.pg 20230927) Check if this behavior causes a memory leak of envoy.
 	var logFiltered string
 	if !req.Delta.IsEmpty() {
 		logFiltered = " filtered:" + strconv.Itoa(len(w.ResourceNames)-len(req.Delta.Subscribed))
@@ -461,6 +465,8 @@ func (s *DiscoveryServer) pushDeltaXds(con *Connection,
 			s.compareDiff(con, originalW, fullRes, res, deletedRes, usedDelta, req.Delta, l.Incremental)
 		}
 	case model.XdsResourceGenerator:
+		// TODO(wangjian.pg 20230927) Check if stow generation causes envoy memory leak,
+		// eg. already deleted clusters resides in memory forever.
 		res, logdata, err = g.Generate(con.proxy, w, req)
 	}
 	if err != nil || (res == nil && deletedRes == nil && v3.GetShortType(w.TypeUrl) != "VHDS") {

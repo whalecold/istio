@@ -61,9 +61,9 @@ func checkProxyDependencies(proxy *model.Proxy, config model.ConfigKey, push *mo
 	// Detailed config dependencies check.
 	switch proxy.Type {
 	case model.SidecarProxy:
-		sidecarScope, preSidecarScope := proxy.SidecarScope, proxy.PrevSidecarScope
+		sidecarScope, prevSidecarScope := proxy.SidecarScope, proxy.PrevSidecarScope
 		if proxy.OnDemandEnable {
-			sidecarScope, preSidecarScope = proxy.onDemandSidecarScope, proxy.PrevOnDemandSidecarScope
+			sidecarScope, prevSidecarScope = proxy.OnDemandSidecarScope, proxy.PrevOnDemandSidecarScope
 		}
 
 		if sidecarScope.DependsOnConfig(config) {

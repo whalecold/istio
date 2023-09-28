@@ -363,6 +363,8 @@ type PushRequest struct {
 
 // ResourceDelta records the difference in requested resources by an XDS client
 type ResourceDelta struct {
+	// TypeUrl is the type of subscribed and unsubscribed resources.
+	TypeUrl string
 	// Subscribed indicates the client requested these additional resources
 	Subscribed sets.String
 	// Unsubscribed indicates the client no longer requires these resources
@@ -764,6 +766,7 @@ func virtualServiceDestinations(v *networking.VirtualService) map[string]sets.Se
 
 // GatewayServices returns the set of services which are referred from the proxy gateways.
 func (ps *PushContext) GatewayServices(proxy *Proxy) []*Service {
+	// TODO(wangjian 20230928), SidecarScope should be replaced by onDemandSidecarScope?
 	svcs := proxy.SidecarScope.services
 
 	// MergedGateway will be nil when there are no configs in the
@@ -872,8 +875,17 @@ func (ps *PushContext) GetAllServices() []*Service {
 
 // ServiceForHostname returns the service associated with a given hostname following SidecarScope
 func (ps *PushContext) ServiceForHostname(proxy *Proxy, hostname host.Name) *Service {
-	if proxy != nil && proxy.SidecarScope != nil {
-		return proxy.SidecarScope.servicesByHostname[hostname]
+	var sidecarScope *SidecarScope
+	if proxy != nil {
+		if proxy.OnDemandEnable && proxy.OnDemandSidecarScope != nil {
+			sidecarScope = proxy.OnDemandSidecarScope
+		} else {
+			sidecarScope = proxy.SidecarScope
+		}
+	}
+
+	if sidecarScope != nil {
+		return sidecarScope.servicesByHostname[hostname]
 	}
 
 	// SidecarScope shouldn't be null here. If it is, we can't disambiguate the hostname to use for a namespace,
@@ -1011,6 +1023,7 @@ func (ps *PushContext) getSidecarScope(proxy *Proxy, workloadLabels labels.Insta
 			return sc
 		}
 		// We need to compute this namespace
+		// TODO, refactor this to reduce field and make code more readable.
 		computed := ConvertToSidecarScope(ps, ps.sidecarIndex.meshRootSidecarConfig, proxy.ConfigNamespace)
 		ps.sidecarIndex.defaultSidecarsByNamespace[proxy.ConfigNamespace] = computed
 		return computed
