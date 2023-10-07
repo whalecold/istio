@@ -1011,7 +1011,7 @@ func getIntersectionHosts(listenerHosts []string, onDemandHosts []string, dnsDom
 		return nil
 	} else {
 		proxyCurrentNamespace = dnsDomain[:idx]
-		domainSuffix = dnsDomain[idx+4:]
+		domainSuffix = dnsDomain[idx:]
 	}
 
 	allows := make(map[string]sets.Set[string]) // key is namespace
