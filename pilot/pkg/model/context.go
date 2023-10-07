@@ -860,7 +860,7 @@ func (node *Proxy) resetOnDemandSidecarScope(ps *PushContext) {
 		return
 	}
 
-	trimmedSidecar := trimSidecarByOnDemandHosts(ps, node.ConfigNamespace,
+	trimmedSidecar := trimSidecarByOnDemandHosts(ps, node.DNSDomain,
 		node.SidecarScope.Sidecar, res.ResourceNames)
 
 	trimmedSidecarConfig := &config.Config{
@@ -879,7 +879,7 @@ func onDemandTrimmedSidecarName(name string) string {
 	return "on-demand-trimmed-" + name
 }
 
-func trimSidecarByOnDemandHosts(ps *PushContext, configNamespace string,
+func trimSidecarByOnDemandHosts(ps *PushContext, dnsDomain string,
 	baseSidecar *networking.Sidecar, resourceNames []string) *networking.Sidecar {
 	if baseSidecar == nil {
 		baseSidecar = &networking.Sidecar{
@@ -895,7 +895,7 @@ func trimSidecarByOnDemandHosts(ps *PushContext, configNamespace string,
 	}
 
 	trimmedEgressListeners := trimSidecarEgress(baseSidecar.Egress,
-		resourceNames, configNamespace)
+		resourceNames, dnsDomain)
 
 	return &networking.Sidecar{
 		WorkloadSelector:      baseSidecar.WorkloadSelector,
@@ -941,7 +941,7 @@ func ParseVirtualHostResourceName(resourceName string) (int, string, string, err
 // 2. hostname.namespace                     => k8s service with namespace, access service within the same namespace or other namespace
 // 3. hostname.namespace.svc.local.cluster   => FQDN
 func trimSidecarEgress(egress []*networking.IstioEgressListener,
-	resourceNames []string, configNamespace string) []*networking.IstioEgressListener {
+	resourceNames []string, dnsDomain string) []*networking.IstioEgressListener {
 
 	port2Hosts := make(map[int][]string) // port number => hostnames
 
@@ -972,9 +972,9 @@ func trimSidecarEgress(egress []*networking.IstioEgressListener,
 		}
 		var hosts []string
 		if e.Port != nil {
-			hosts = getIntersectionHosts(e.Hosts, port2Hosts[int(e.Port.GetNumber())], configNamespace)
+			hosts = getIntersectionHosts(e.Hosts, port2Hosts[int(e.Port.GetNumber())], dnsDomain)
 		} else {
-			hosts = getIntersectionHosts(e.Hosts, allHosts, configNamespace)
+			hosts = getIntersectionHosts(e.Hosts, allHosts, dnsDomain)
 		}
 		if len(hosts) == 0 {
 			continue
@@ -1001,11 +1001,18 @@ func trimSidecarEgress(egress []*networking.IstioEgressListener,
 // 4. Access external services.
 // 5. Cross cluster access.
 // 6. Access hostname with '.svc.' of external service.
-func getIntersectionHosts(listenerHosts []string, onDemandHosts []string, configNamespace string) []string {
+func getIntersectionHosts(listenerHosts []string, onDemandHosts []string, dnsDomain string) []string {
 	if len(onDemandHosts) == 0 {
 		return nil
 	}
-	out := make([]string, 0, len(onDemandHosts))
+	var proxyCurrentNamespace, domainSuffix string
+	if idx := strings.Index(dnsDomain, ".svc"); idx == -1 || idx < 1 {
+		log.Errorf("illegal dnsDomain %s", dnsDomain)
+		return nil
+	} else {
+		proxyCurrentNamespace = dnsDomain[:idx]
+		domainSuffix = dnsDomain[idx+4:]
+	}
 
 	allows := make(map[string]sets.Set[string]) // key is namespace
 	var allowAll bool
@@ -1024,7 +1031,7 @@ func getIntersectionHosts(listenerHosts []string, onDemandHosts []string, config
 
 		namespace, hostname := parts[0], parts[1]
 		if namespace == currentNamespace {
-			namespace = configNamespace
+			namespace = proxyCurrentNamespace
 		}
 
 		svcs, ok := allows[namespace]
@@ -1035,20 +1042,12 @@ func getIntersectionHosts(listenerHosts []string, onDemandHosts []string, config
 		svcs.Insert(hostname)
 	}
 
-	existHosts := sets.New[string]()
-
-	addAndDedup := func(host string) {
-		if existHosts.Contains(host) {
-			return
-		}
-		existHosts.Insert(host)
-		out = append(out, host)
-	}
+	out := sets.New[string]()
 
 DOMAINLOOP:
 	for _, hostname := range onDemandHosts {
-		// TODO(wangjian.pg 20230926) may check FQDN by node.DNSDomain
-		if idx := strings.Index(hostname, ".svc."); idx != -1 {
+		// TODO(wangjian.pg 20230926) may check FQDN by dnsDomain
+		if idx := strings.Index(hostname, ".svc"); idx != -1 {
 			hostname = hostname[:idx]
 		}
 
@@ -1056,35 +1055,39 @@ DOMAINLOOP:
 		if parts := strings.Split(hostname, "."); len(parts) == 2 {
 			hostname, hostNamespace = parts[0], parts[1]
 		} else if len(parts) == 1 {
-			hostNamespace = configNamespace
+			hostNamespace = proxyCurrentNamespace
 		} else {
 			// external hosts.
 			continue
 		}
 
+		// Convert hostname to FQDN since `Hosts` field of
+		// IstioEgressListeners is specified through FQDN format.
+		hostname = hostname + "." + hostNamespace + domainSuffix
+
 		if allowAll ||
 			allows[hostNamespace].Contains(hostname) ||
 			allows[wildcardNamespace].Contains(hostname) ||
 			allows[hostNamespace].Contains(wildcarDomain) {
-			addAndDedup(hostNamespace + "/" + hostname)
+			out.Insert(hostNamespace + "/" + hostname)
 			continue
 		}
 
 		for k := range allows[hostNamespace] {
 			if host.Name(hostname).SubsetOf(host.Name(k)) {
-				addAndDedup(hostNamespace + "/" + hostname)
+				out.Insert(hostNamespace + "/" + hostname)
 				goto DOMAINLOOP
 			}
 		}
 
 		for k := range allows[wildcardNamespace] {
 			if host.Name(hostname).SubsetOf(host.Name(k)) {
-				addAndDedup(hostNamespace + "/" + hostname)
+				out.Insert(hostNamespace + "/" + hostname)
 				break
 			}
 		}
 	}
-	return out
+	return out.UnsortedList()
 }
 
 // SetGatewaysForProxy merges the Gateway objects associated with this
