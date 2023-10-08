@@ -226,6 +226,7 @@ func (s *DiscoveryServer) processRequest(req *discovery.DiscoveryRequest, con *C
 	// It can happen when `processRequest` comes after push context has been updated(s.initPushContext),
 	// but proxy's SidecarScope has been updated(s.computeProxyState -> SetSidecarScope) due to optimizations that skip sidecar scope
 	// computation.
+	// TODO(wangjian.pg 2023.10.08), refer to: https://github.com/istio/istio/issues/34549#issuecomment-895947974
 	if con.proxy.SidecarScope != nil && con.proxy.SidecarScope.Version != request.Push.PushVersion {
 		s.computeProxyState(con.proxy, request)
 	}
@@ -454,6 +455,7 @@ func (s *DiscoveryServer) shouldRespond(con *Connection, request *discovery.Disc
 		added, removed, con.conID, request.VersionInfo, request.ResponseNonce)
 
 	return true, model.ResourceDelta{
+		TypeUrl:      request.TypeUrl,
 		Subscribed:   added,
 		Unsubscribed: removed,
 	}
@@ -496,6 +498,7 @@ func warmingDependencies(typeURL string) []string {
 	case v3.ClusterType:
 		return []string{v3.EndpointType}
 	case v3.RouteType:
+		// TODO(wangjian 2023.10.07), dive into this
 		return []string{v3.VirtualHostType}
 	default:
 		return nil
@@ -695,6 +698,11 @@ func (s *DiscoveryServer) computeProxyState(proxy *model.Proxy, request *model.P
 			if sidecar && gateway {
 				break
 			}
+		}
+		// Triggers recompute of the `SidecarScope` so that the proxy's `OnDemandSidecarScope`
+		// is re-trimmed when a new VHDS subscription request is received.
+		if request.Delta.TypeUrl == v3.VirtualHostType && !request.Delta.IsEmpty() {
+			sidecar = true
 		}
 	}
 	// compute the sidecarscope for both proxy type whenever it changes.
