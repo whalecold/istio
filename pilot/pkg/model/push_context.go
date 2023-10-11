@@ -877,10 +877,12 @@ func (ps *PushContext) GetAllServices() []*Service {
 func (ps *PushContext) ServiceForHostname(proxy *Proxy, hostname host.Name) *Service {
 	var sidecarScope *SidecarScope
 	if proxy != nil {
-		if proxy.OnDemandEnable && proxy.OnDemandSidecarScope != nil {
+		sidecarScope = proxy.SidecarScope
+		if proxy.OnDemandEnable {
+			if proxy.OnDemandSidecarScope == nil {
+				return nil
+			}
 			sidecarScope = proxy.OnDemandSidecarScope
-		} else {
-			sidecarScope = proxy.SidecarScope
 		}
 	}
 

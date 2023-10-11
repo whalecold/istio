@@ -841,7 +841,9 @@ func (node *Proxy) SetSidecarScope(ps *PushContext) {
 
 	if node.Type == SidecarProxy {
 		node.SidecarScope = ps.getSidecarScope(node, node.Labels)
-		node.resetOnDemandSidecarScope(ps)
+		if node.OnDemandEnable {
+			node.resetOnDemandSidecarScope(ps)
+		}
 	} else {
 		// Gateways should just have a default scope with egress: */*
 		node.SidecarScope = ps.getSidecarScope(node, nil)
@@ -854,14 +856,16 @@ func (node *Proxy) resetOnDemandSidecarScope(ps *PushContext) {
 	if node.SidecarScope == nil {
 		return
 	}
-	res, ok := node.WatchedResources[v3.VirtualHostType]
-	if !ok || len(res.ResourceNames) == 0 {
-		node.OnDemandSidecarScope = node.SidecarScope
+
+	watched, ok := node.WatchedResources[v3.VirtualHostType]
+	if !ok || len(watched.ResourceNames) == 0 {
+		// Just left the `OnDemandSidecarScope` as nil if
+		// no virtual hosts discovery requests have received.
 		return
 	}
 
 	trimmedSidecar := trimSidecarByOnDemandHosts(ps, node.DNSDomain,
-		node.SidecarScope.Sidecar, res.ResourceNames)
+		node.SidecarScope.Sidecar, watched.ResourceNames)
 
 	trimmedSidecarConfig := &config.Config{
 		Meta: config.Meta{
@@ -908,8 +912,9 @@ func trimSidecarByOnDemandHosts(ps *PushContext, dnsDomain string,
 
 // ParseVirtualHostResourceName the format is routeName/domain:routeName
 // Deduce listener port, hostname:port, hostname from the VHDS resourceName
+// TODO(wangjian.pg 2023.10.08) refactor this function to improve readability.
 func ParseVirtualHostResourceName(resourceName string) (int, string, string, error) {
-	// not support wildcard character
+	// not support wildcard character.
 	first := strings.IndexRune(resourceName, '/')
 	if first == -1 {
 		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
@@ -935,11 +940,12 @@ func ParseVirtualHostResourceName(resourceName string) (int, string, string, err
 	return port, vhdsName, vhdsDomain, nil
 }
 
+// TODO(wangjian.pg 2023.10.08) refactor the following comments.
 // trimSidecarEgress ...
 // HTTP request to k8s internal services has three forms:
 // 1. hostname                               => k8s service name only, access service in the same namespace
 // 2. hostname.namespace                     => k8s service with namespace, access service within the same namespace or other namespace
-// 3. hostname.namespace.svc.local.cluster   => FQDN
+// 3. hostname.namespace.svc.cluster.local   => FQDN
 func trimSidecarEgress(egress []*networking.IstioEgressListener,
 	resourceNames []string, dnsDomain string) []*networking.IstioEgressListener {
 
@@ -991,6 +997,7 @@ func trimSidecarEgress(egress []*networking.IstioEgressListener,
 	return out
 }
 
+// TODO(wangjian.pg 2023.10.8) refactor the following comments.
 // getIntersectionHosts hosts is configured by sidecarScope cr, and the watchDomains is dynamically updated
 // by on-demand vhds. Hosts usually have a larger scope and some of them are not needed, watchDomains are
 // needed on fact, get the intersection of sets.

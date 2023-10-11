@@ -89,10 +89,12 @@ func (configgen *ConfigGeneratorImpl) BuildClusters(proxy *model.Proxy, req *mod
 		services = req.Push.GatewayServices(proxy)
 	} else {
 		sidecarScope := proxy.SidecarScope
-		if proxy.OnDemandEnable && proxy.OnDemandSidecarScope != nil {
+		if proxy.OnDemandEnable {
 			sidecarScope = proxy.OnDemandSidecarScope
 		}
-		services = sidecarScope.Services()
+		if sidecarScope != nil {
+			services = sidecarScope.Services()
+		}
 	}
 	return configgen.buildClusters(proxy, req, services)
 }
@@ -117,7 +119,7 @@ func copyServiceWithPortFilter(svc *model.Service, ports map[int]bool) *model.Se
 	return out
 }
 
-func (configgen *ConfigGeneratorImpl) buildDeltaClusters(proxy *model.Proxy, updates *model.PushRequest,
+func (configgen *ConfigGeneratorImpl) buildWatchedClusters(proxy *model.Proxy, updates *model.PushRequest,
 	watched *model.WatchedResource,
 ) ([]*discovery.Resource, model.XdsLogDetails) {
 	var services []*model.Service
@@ -151,14 +153,16 @@ func (configgen *ConfigGeneratorImpl) buildDeltaClusters(proxy *model.Proxy, upd
 func (configgen *ConfigGeneratorImpl) BuildDeltaClusters(proxy *model.Proxy, updates *model.PushRequest,
 	watched *model.WatchedResource,
 ) ([]*discovery.Resource, []string, model.XdsLogDetails, bool) {
+	// This method is triggered by a delta xDS request(checked through updates.Delta.IsEmpty())
+	// and we only need to build/generate the requested clusters
+	if !updates.Delta.IsEmpty() {
+		// TODO(wangjian.pg 2023.10.11) handle the wildcard subscription.
+		cl, lg := configgen.buildWatchedClusters(proxy, updates, watched)
+		return cl, nil, lg, true
+	}
+
 	// if we can't use delta, fall back to generate all
 	if !shouldUseDelta(updates) {
-		// This method is trigged by an on-demand cluster discovery delta xDS request
-		// and we only need to build/generate the requested clusters
-		if !updates.Delta.IsEmpty() && proxy.OnDemandEnable {
-			cl, lg := configgen.buildDeltaClusters(proxy, updates, watched)
-			return cl, nil, lg, false
-		}
 		cl, lg := configgen.BuildClusters(proxy, updates)
 		return cl, nil, lg, false
 	}
