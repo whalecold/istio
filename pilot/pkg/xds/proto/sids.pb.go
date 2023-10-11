@@ -113,7 +113,7 @@ type ServiceInstance_Service struct {
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Namespace is "destination.service.namespace" attribute
 	Namespace string `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	// Name of the service, e.g. "catalog.mystore.com"
+	// Host of the service, e.g. "productpage.bookinfo.svc.cluster.local"
 	Host string `protobuf:"bytes,3,opt,name=host,proto3" json:"host,omitempty"`
 }
 

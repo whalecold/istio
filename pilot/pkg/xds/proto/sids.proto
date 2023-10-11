@@ -39,7 +39,7 @@ message ServiceInstance {
 	    string name = 1;
 	    // Namespace is "destination.service.namespace" attribute
 	    string namespace = 2;
-	    // Name of the service, e.g. "catalog.mystore.com"
+	    // Host of the service, e.g. "productpage.bookinfo.svc.cluster.local"
 	    string host = 3;
 	}
 
