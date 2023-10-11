@@ -29,6 +29,7 @@ func (l SidsGenerator) Generate(proxy *model.Proxy, watch *model.WatchedResource
 			continue
 		}
 		namespace, host := hosts[0], hosts[1]
+		name, _, _ := strings.Cut(host, "."+namespace)
 		shards, ok := l.Server.Env.EndpointIndex.ShardsForService(host, namespace)
 		if !ok {
 			continue
@@ -50,7 +51,7 @@ func (l SidsGenerator) Generate(proxy *model.Proxy, watch *model.WatchedResource
 			Resource: protoconv.MessageToAny(&proto.ServiceInstance{
 				Service: &proto.ServiceInstance_Service{
 					Namespace: namespace,
-					Name:      strings.Trim(host, "."+namespace),
+					Name:      name,
 					Host:      host,
 				},
 				Endpoints: endpoints,
