@@ -17,7 +17,8 @@ package xds
 import (
 	"strings"
 
-	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	discoveryv3 "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pilot/pkg/util/protoconv"
 	"istio.io/istio/pilot/pkg/xds/proto"
@@ -30,8 +31,8 @@ type SidsGenerator struct {
 var _ model.XdsResourceGenerator = &SidsGenerator{}
 
 func (l SidsGenerator) Generate(proxy *model.Proxy, watch *model.WatchedResource, req *model.PushRequest) (model.Resources, model.XdsLogDetails, error) {
-	// if there is no endpoint or service changed, return directly.
-	if !edsNeedsPush(req.ConfigsUpdated) && !rdsNeedsPush(req) {
+	// if there is no endpoint changed, return directly.
+	if !edsNeedsPush(req.ConfigsUpdated) {
 		return nil, model.DefaultXdsLogDetails, nil
 	}
 	resources := model.Resources{}
@@ -61,7 +62,7 @@ func (l SidsGenerator) Generate(proxy *model.Proxy, watch *model.WatchedResource
 			}
 		}
 		shards.Unlock()
-		resources = append(resources, &discovery.Resource{
+		resources = append(resources, &discoveryv3.Resource{
 			Resource: protoconv.MessageToAny(&proto.ServiceInstance{
 				Service: &proto.ServiceInstance_Service{
 					Namespace: namespace,

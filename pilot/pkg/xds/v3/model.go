@@ -33,7 +33,7 @@ const (
 	NameTableType        = resource.APITypePrefix + "istio.networking.nds.v1.NameTable"
 	HealthInfoType       = resource.APITypePrefix + "istio.v1.HealthInformation"
 	ProxyConfigType      = resource.APITypePrefix + "istio.mesh.v1alpha1.ProxyConfig"
-	ServiceInstancesType = resource.APITypePrefix + "istio.mesh.v1alpha1.ServiceInstances"
+	ServiceInstancesType = resource.APITypePrefix + "istio.mesh.v1alpha1.ServiceInstance"
 	// DebugType requests debug info from istio, a secured implementation for istio debug interface.
 	DebugType     = "istio.io/debug"
 	BootstrapType = resource.APITypePrefix + "envoy.config.bootstrap.v3.Bootstrap"
