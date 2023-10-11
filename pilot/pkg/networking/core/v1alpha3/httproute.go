@@ -148,6 +148,7 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 		if index != -1 {
 			useSniffing = true
 		}
+		// the routeName is hostname:port while useSniffing enabled.
 		listenerPort, err = strconv.Atoi(routeName[index+1:])
 	} else {
 		listenerPort, err = strconv.Atoi(routeName)
@@ -177,7 +178,7 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 		out.IgnorePortInHostMatching = true
 	}
 
-	if node.OnDemandEnable && !useSniffing {
+	if node.OnDemandEnable {
 		out.Vhds = vhdsConfiguration()
 		// apply envoy filter patches
 		out = envoyfilter.ApplyRouteConfigurationPatches(networking.EnvoyFilter_SIDECAR_OUTBOUND, node, efw, out)
@@ -321,53 +322,22 @@ func BuildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext
 	efKeys []string,
 	xdsCache model.XdsCache,
 ) ([]*route.VirtualHost, *discovery.Resource, *istio_route.Cache) {
+	sidecarScope := node.SidecarScope
+	if node.OnDemandEnable {
+		sidecarScope = node.OnDemandSidecarScope
+	}
 	// Get the services from the egress listener.  When sniffing is enabled, we send
 	// route name as foo.bar.com:8080 which is going to match against the wildcard
 	// egress listener only. A route with sniffing would not have been generated if there
 	// was a sidecar with explicit port (and hence protocol declaration). A route with
 	// sniffing is generated only in the case of the catch all egress listener.
-	egressListener := node.SidecarScope.GetEgressListenerForRDS(listenerPort, routeName)
+	egressListener := sidecarScope.GetEgressListenerForRDS(listenerPort, routeName)
 	// We should never be getting a nil egress listener because the code that setup this RDS
 	// call obviously saw an egress listener
 	if egressListener == nil {
 		return nil, nil, nil
 	}
 	return buildSidecarOutboundVirtualHosts(node, push, routeName, listenerPort, efKeys, egressListener, xdsCache)
-}
-
-func BuildOnDemandSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext,
-	routeName string,
-	listenerPort int,
-	resources map[string]*vhdsRequest,
-	efKeys []string,
-) ([]*route.VirtualHost, *discovery.Resource, *istio_route.Cache) {
-	// TODO, checkout the sniffing logic conflict
-	// Get the services from the egress listener.  When sniffing is enabled, we send
-	// route name as foo.bar.com:8080 which is going to match against the wildcard
-	// egress listener only. A route with sniffing would not have been generated if there
-	// was a sidecar with explicit port (and hence protocol declaration). A route with
-	// sniffing is generated only in the case of the catch all egress listener.
-	egressListener := node.OnDemandSidecarScope.GetEgressListenerForRDS(listenerPort, routeName)
-	// We should never be getting a nil egress listener because the code that setup this RDS
-	// call obviously saw an egress listener
-	if egressListener == nil {
-		return nil, nil, nil
-	}
-	return buildSidecarOutboundVirtualHosts(node, push, routeName, listenerPort, efKeys, egressListener, &model.DisabledCache{})
-}
-
-// filterServicesWithHosts filters the useless service.
-func filterServicesWithHosts(services []*model.Service, hosts map[string]*vhdsRequest) []*model.Service {
-	if len(hosts) == 0 {
-		return services
-	}
-	out := make([]*model.Service, 0, len(services))
-	for _, svc := range services {
-		if _, ok := hosts[svc.Hostname.String()]; ok {
-			out = append(out, svc.DeepCopy())
-		}
-	}
-	return out
 }
 
 func buildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext,

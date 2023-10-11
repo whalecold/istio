@@ -32,7 +32,7 @@ import (
 )
 
 type vhdsRequest struct {
-	// the native resoruce name in the vhds request. default format is routeName/domain:port
+	// the native resource name in the vhds request. default format is routeName/domain:port
 	resourceName string
 	// domain:port
 	vhdsName   string
@@ -119,9 +119,9 @@ func buildVhdsSidecarOutboundVirtualHosts(
 	efKeys []string,
 ) map[string]*route.VirtualHost {
 	routeName := strconv.Itoa(listenerPort)
-	// TODO use single function or reuse the old one.
 	// FIXME remove the vhds whose corresponding route has been deleted.
-	vhosts, _, _ := BuildOnDemandSidecarOutboundVirtualHosts(node, req.Push, routeName, listenerPort, resources, efKeys)
+	// TODO(wangjian.pg 2023.10.11) should we enable the xDS cache?
+	vhosts, _, _ := BuildSidecarOutboundVirtualHosts(node, req.Push, routeName, listenerPort, efKeys, model.DisabledCache{})
 	virtualHosts := make(map[string]*route.VirtualHost)
 	for _, vhds := range vhosts {
 		for _, domain := range vhds.Domains {
@@ -178,30 +178,27 @@ func buildVhdsSidecarOutboundVirtualHostsResource(
 }
 
 // ParseVirtualHostResourceName the format is routeName/domain:port
-// routeName is the same as port in the context of istio.
+// for service with protocol sniffing enabled, routeName is at the format of FQDN:port
+// Otherwise, the routeName is identical to port.
 func ParseVirtualHostResourceName(resourceName string) (int, string, string, error) {
 	// not support wildcard character
-	first := strings.LastIndexByte(resourceName, '/')
-	if first == -1 {
+	sep := strings.LastIndexByte(resourceName, '/')
+	if sep == -1 {
 		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
 	}
-	var vhdsName, vhdsDomain string
-	routeName := resourceName[:first]
-	last := strings.Index(resourceName, ":")
-	if last != -1 && first+1 >= last {
-		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
+
+	routeName := resourceName[:sep]
+	vhdsName := resourceName[sep+1:]
+	vhdsDomain, _, _ := strings.Cut(vhdsName, ":")
+	_, portStr, found := strings.Cut(routeName, ":")
+	if !found {
+		portStr = routeName
 	}
-	if last == -1 {
-		vhdsName = resourceName[first+1:]
-		vhdsDomain = resourceName[first+1:]
-	} else {
-		vhdsName = resourceName[first+1:]
-		vhdsDomain = resourceName[first+1 : last]
-	}
-	port, err := strconv.Atoi(routeName)
+	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
 	}
+
 	// port, request host, host domain name.
 	return port, vhdsName, vhdsDomain, nil
 }
