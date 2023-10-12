@@ -44,7 +44,7 @@ func classifyResourceByPort(resourceNames []string) (map[int]map[string]*vhdsReq
 	vhdsRequests := make(map[int]map[string]*vhdsRequest)
 	var deletedConfigurations model.DeletedResources
 	for _, resourceName := range resourceNames {
-		listenerPort, vhdsName, vhdsDomain, err := ParseVirtualHostResourceName(resourceName)
+		listenerPort, vhdsName, vhdsDomain, err := model.ParseVirtualHostResourceName(resourceName)
 		if err != nil {
 			deletedConfigurations = append(deletedConfigurations, resourceName)
 			continue
@@ -175,32 +175,6 @@ func buildVhdsSidecarOutboundVirtualHostsResource(
 		})
 	}
 	return out
-}
-
-// ParseVirtualHostResourceName the format is routeName/domain:port
-// for service with protocol sniffing enabled, routeName is at the format of FQDN:port
-// Otherwise, the routeName is identical to port.
-func ParseVirtualHostResourceName(resourceName string) (int, string, string, error) {
-	// not support wildcard character
-	sep := strings.LastIndexByte(resourceName, '/')
-	if sep == -1 {
-		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
-	}
-
-	routeName := resourceName[:sep]
-	vhdsName := resourceName[sep+1:]
-	vhdsDomain, _, _ := strings.Cut(vhdsName, ":")
-	_, portStr, found := strings.Cut(routeName, ":")
-	if !found {
-		portStr = routeName
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
-	}
-
-	// port, request host, host domain name.
-	return port, vhdsName, vhdsDomain, nil
 }
 
 func buildVirtualHostWithDefaultPolicy(node *model.Proxy, name string, domains []string) *route.VirtualHost {

@@ -910,33 +910,31 @@ func trimSidecarByOnDemandHosts(ps *PushContext, dnsDomain string,
 
 }
 
-// ParseVirtualHostResourceName the format is routeName/domain:routeName
-// Deduce listener port, hostname:port, hostname from the VHDS resourceName
+// ParseVirtualHostResourceName parse on-demand virtual hosts discovery requests.
+// For service port with protocol sniffing enabled, routeName is at the format of FQDN:port
+// Otherwise, the routeName is identical to port.
 // TODO(wangjian.pg 2023.10.08) refactor this function to improve readability.
 func ParseVirtualHostResourceName(resourceName string) (int, string, string, error) {
-	// not support wildcard character.
-	first := strings.IndexRune(resourceName, '/')
-	if first == -1 {
+	// not support wildcard character
+	sep := strings.LastIndexByte(resourceName, '/')
+	if sep == -1 {
 		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
 	}
-	var vhdsName, vhdsDomain string
-	routeName := resourceName[:first]
-	last := strings.Index(resourceName, ":")
-	if last != -1 && first+1 >= last {
-		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
+
+	routeName := resourceName[:sep]
+	vhdsName := resourceName[sep+1:]
+
+	vhdsDomain, _, _ := strings.Cut(vhdsName, ":")
+	_, portStr, found := strings.Cut(routeName, ":")
+	if !found {
+		portStr = routeName
 	}
-	if last == -1 {
-		vhdsName = resourceName[first+1:]
-		vhdsDomain = resourceName[first+1:]
-	} else {
-		vhdsName = resourceName[first+1:]
-		vhdsDomain = resourceName[first+1 : last]
-	}
-	port, err := strconv.Atoi(routeName)
+	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
 	}
-	// port vhdsName(hostname:port) domain(hostname)
+
+	// port, request host, host domain name.
 	return port, vhdsName, vhdsDomain, nil
 }
 
