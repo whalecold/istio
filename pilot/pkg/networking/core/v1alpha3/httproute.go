@@ -48,6 +48,17 @@ const (
 	inboundVirtualHostPrefix = string(model.TrafficDirectionInbound) + "|http|"
 )
 
+var (
+	adsVHDSConfigSource = &route.Vhds{
+		ConfigSource: &v3.ConfigSource{
+			ConfigSourceSpecifier: &v3.ConfigSource_Ads{
+				Ads: &v3.AggregatedConfigSource{},
+			},
+			ResourceApiVersion: v3.ApiVersion_V3,
+		},
+	}
+)
+
 // BuildHTTPRoutes produces a list of routes for the proxy
 func (configgen *ConfigGeneratorImpl) BuildHTTPRoutes(
 	node *model.Proxy,
@@ -179,7 +190,7 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 	}
 
 	if node.OnDemandEnable {
-		out.Vhds = vhdsConfiguration()
+		out.Vhds = adsVHDSConfigSource
 		// apply envoy filter patches
 		out = envoyfilter.ApplyRouteConfigurationPatches(networking.EnvoyFilter_SIDECAR_OUTBOUND, node, efw, out)
 		resource = &discovery.Resource{
@@ -239,17 +250,6 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 	}
 
 	return resource, false
-}
-
-func vhdsConfiguration() *route.Vhds {
-	return &route.Vhds{
-		ConfigSource: &v3.ConfigSource{
-			ConfigSourceSpecifier: &v3.ConfigSource_Ads{
-				Ads: &v3.AggregatedConfigSource{},
-			},
-			ResourceApiVersion: v3.ApiVersion_V3,
-		},
-	}
 }
 
 // TODO: merge with IstioEgressListenerWrapper.selectVirtualServices

@@ -157,6 +157,7 @@ func (configgen *ConfigGeneratorImpl) BuildDeltaClusters(proxy *model.Proxy, upd
 	// and we only need to build/generate the requested clusters
 	if !updates.Delta.IsEmpty() {
 		// TODO(wangjian.pg 2023.10.11) handle the wildcard subscription.
+		// TODO(wangjian.pg 2023.10.12)for ODCDS, do not need to rebuild inbound/blackhole/passthroughCluster everytime.
 		cl, lg := configgen.buildWatchedClusters(proxy, updates, watched)
 		return cl, nil, lg, true
 	}

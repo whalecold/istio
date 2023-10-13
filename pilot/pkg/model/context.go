@@ -938,12 +938,7 @@ func ParseVirtualHostResourceName(resourceName string) (int, string, string, err
 	return port, vhdsName, vhdsDomain, nil
 }
 
-// TODO(wangjian.pg 2023.10.08) refactor the following comments.
 // trimSidecarEgress ...
-// HTTP request to k8s internal services has three forms:
-// 1. hostname                               => k8s service name only, access service in the same namespace
-// 2. hostname.namespace                     => k8s service with namespace, access service within the same namespace or other namespace
-// 3. hostname.namespace.svc.cluster.local   => FQDN
 func trimSidecarEgress(egress []*networking.IstioEgressListener,
 	resourceNames []string, dnsDomain string) []*networking.IstioEgressListener {
 
@@ -996,9 +991,9 @@ func trimSidecarEgress(egress []*networking.IstioEgressListener,
 }
 
 // TODO(wangjian.pg 2023.10.8) refactor the following comments.
-// getIntersectionHosts hosts is configured by sidecarScope cr, and the watchDomains is dynamically updated
-// by on-demand vhds. Hosts usually have a larger scope and some of them are not needed, watchDomains are
-// needed on fact, get the intersection of sets.
+// getIntersectionHosts listenerHosts is configured by sidecarScope cr, and the onDemandHosts is dynamically updated
+// by on-demand virtual host discovery requests(VHDS). listenerHosts usually have a larger scope and some of them are
+// not needed, onDemandHosts are needed on fact, get the intersection of sets.
 // Test should cover at least the following cases:
 // 1. Access service in the namespace of the pod/sidecar proxy.
 // 2. Access service in the other namespace.
@@ -1049,48 +1044,66 @@ func getIntersectionHosts(listenerHosts []string, onDemandHosts []string, dnsDom
 
 	out := sets.New[string]()
 
-DOMAINLOOP:
-	for _, hostname := range onDemandHosts {
-		// TODO(wangjian.pg 20230926) may check FQDN by dnsDomain
-		if idx := strings.Index(hostname, ".svc"); idx != -1 {
-			hostname = hostname[:idx]
+	// hostAllowedBySidecarScope checks whether the hostname is allowed aaccording to sidecarScope,
+	// The first return value is whether the hostname is allowed  and the second is whether it is
+	// allowed by a wildcard namespace match.
+	hostAllowedBySidecarScope := func(hostNamespace, hostname string) (bool, bool) {
+		if allowAll || allows[wildcardNamespace].Contains(hostname) {
+			return true, true
 		}
 
-		var hostNamespace string
-		if parts := strings.Split(hostname, "."); len(parts) == 2 {
-			hostname, hostNamespace = parts[0], parts[1]
-		} else if len(parts) == 1 {
-			hostNamespace = proxyCurrentNamespace
-		} else {
-			// external hosts.
-			continue
-		}
-
-		// Convert hostname to FQDN since `Hosts` field of
-		// IstioEgressListeners is specified through FQDN format.
-		hostname = hostname + "." + hostNamespace + domainSuffix
-
-		if allowAll ||
-			allows[hostNamespace].Contains(hostname) ||
-			allows[wildcardNamespace].Contains(hostname) ||
-			allows[hostNamespace].Contains(wildcarDomain) {
-			out.Insert(hostNamespace + "/" + hostname)
-			continue
+		if allows[hostNamespace].Contains(wildcardDomain) ||
+			allows[hostNamespace].Contains(hostname) {
+			return true, false
 		}
 
 		for k := range allows[hostNamespace] {
 			if host.Name(hostname).SubsetOf(host.Name(k)) {
-				out.Insert(hostNamespace + "/" + hostname)
-				goto DOMAINLOOP
+				return true, false
 			}
 		}
 
 		for k := range allows[wildcardNamespace] {
 			if host.Name(hostname).SubsetOf(host.Name(k)) {
-				out.Insert(hostNamespace + "/" + hostname)
-				break
+				return true, true
 			}
 		}
+		return false, false
+	}
+
+	for _, hostname := range onDemandHosts {
+		shortName := hostname
+		// TODO(wangjian.pg 20230926) may check FQDN by dnsDomain
+		if idx := strings.Index(hostname, ".svc"); idx != -1 {
+			shortName = hostname[:idx]
+		}
+
+		var hostNamespace string
+		if parts := strings.Split(shortName, "."); len(parts) == 2 {
+			shortName, hostNamespace = parts[0], parts[1]
+		} else if len(parts) == 1 {
+			hostNamespace = proxyCurrentNamespace
+		}
+
+		if hostNamespace != "" {
+			// The hostname maybe a k8s service name, convert it to FQDN since
+			// hostname should in the format of "namespace/FQDN" according to the
+			// specification of `networking.Sidecar.IstioEgressListeners.Hosts.`
+			fqdn := shortName + "." + hostNamespace + domainSuffix
+			if ok, _ := hostAllowedBySidecarScope(hostNamespace, fqdn); ok {
+				out.Insert(hostNamespace + "/" + fqdn)
+			}
+		}
+
+		// hostname maybe a service from an external registry specified by `ServiceEntry`, e.g. foo.bar.
+		if ok, wildcardNamespace := hostAllowedBySidecarScope(proxyCurrentNamespace, hostname); ok {
+			if wildcardNamespace {
+				out.Insert("*/" + hostname)
+			} else {
+				out.Insert(proxyCurrentNamespace + "/" + hostname)
+			}
+		}
+
 	}
 	return out.UnsortedList()
 }

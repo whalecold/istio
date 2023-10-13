@@ -32,7 +32,7 @@ import (
 
 const (
 	wildcardNamespace = "*"
-	wildcarDomain     = "*"
+	wildcardDomain    = "*"
 	currentNamespace  = "."
 	denyAll           = "~/*"
 	wildcardService   = host.Name("*")
