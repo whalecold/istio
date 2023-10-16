@@ -33,24 +33,19 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	meshconfig "istio.io/api/mesh/v1alpha1"
-	networking "istio.io/api/networking/v1alpha3"
 	"istio.io/istio/pilot/pkg/features"
 	istionetworking "istio.io/istio/pilot/pkg/networking"
 	"istio.io/istio/pilot/pkg/trustbundle"
 	networkutil "istio.io/istio/pilot/pkg/util/network"
-	v3 "istio.io/istio/pilot/pkg/xds/v3"
 	"istio.io/istio/pkg/cluster"
-	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/constants"
 	"istio.io/istio/pkg/config/host"
 	"istio.io/istio/pkg/config/mesh"
-	"istio.io/istio/pkg/config/protocol"
 	"istio.io/istio/pkg/network"
 	"istio.io/istio/pkg/spiffe"
 	"istio.io/istio/pkg/util/identifier"
 	netutil "istio.io/istio/pkg/util/net"
 	"istio.io/istio/pkg/util/protomarshal"
-	"istio.io/istio/pkg/util/sets"
 	"istio.io/pkg/ledger"
 	"istio.io/pkg/monitoring"
 )
@@ -842,7 +837,7 @@ func (node *Proxy) SetSidecarScope(ps *PushContext) {
 	if node.Type == SidecarProxy {
 		node.SidecarScope = ps.getSidecarScope(node, node.Labels)
 		if node.OnDemandEnable {
-			node.resetOnDemandSidecarScope(ps)
+			node.trimSidecarScopeByOnDemandHosts(ps)
 		}
 	} else {
 		// Gateways should just have a default scope with egress: */*
@@ -850,262 +845,6 @@ func (node *Proxy) SetSidecarScope(ps *PushContext) {
 	}
 	node.PrevSidecarScope = sidecarScope
 	node.PrevOnDemandSidecarScope = onDemandSidecarScope
-}
-
-func (node *Proxy) resetOnDemandSidecarScope(ps *PushContext) {
-	if node.SidecarScope == nil {
-		return
-	}
-
-	watched, ok := node.WatchedResources[v3.VirtualHostType]
-	if !ok || len(watched.ResourceNames) == 0 {
-		// Just left the `OnDemandSidecarScope` as nil if
-		// no virtual hosts discovery requests have received.
-		return
-	}
-
-	trimmedSidecar := trimSidecarByOnDemandHosts(ps, node.DNSDomain,
-		node.SidecarScope.Sidecar, watched.ResourceNames)
-
-	trimmedSidecarConfig := &config.Config{
-		Meta: config.Meta{
-			Name:      onDemandTrimmedSidecarName(node.SidecarScope.Name),
-			Namespace: node.SidecarScope.Namespace,
-		},
-		Spec: trimmedSidecar,
-	}
-
-	node.OnDemandSidecarScope = ConvertToSidecarScope(ps, trimmedSidecarConfig,
-		node.ConfigNamespace)
-}
-
-func onDemandTrimmedSidecarName(name string) string {
-	return "on-demand-trimmed-" + name
-}
-
-func trimSidecarByOnDemandHosts(ps *PushContext, dnsDomain string,
-	baseSidecar *networking.Sidecar, resourceNames []string) *networking.Sidecar {
-	if baseSidecar == nil {
-		baseSidecar = &networking.Sidecar{
-			Egress: []*networking.IstioEgressListener{{
-				Hosts: []string{"*/*"},
-			}},
-		}
-		if ps.Mesh.OutboundTrafficPolicy != nil {
-			baseSidecar.OutboundTrafficPolicy = &networking.OutboundTrafficPolicy{
-				Mode: networking.OutboundTrafficPolicy_Mode(ps.Mesh.OutboundTrafficPolicy.Mode),
-			}
-		}
-	}
-
-	trimmedEgressListeners := trimSidecarEgress(baseSidecar.Egress,
-		resourceNames, dnsDomain)
-
-	return &networking.Sidecar{
-		WorkloadSelector:      baseSidecar.WorkloadSelector,
-		Ingress:               baseSidecar.Ingress,
-		Egress:                trimmedEgressListeners,
-		OutboundTrafficPolicy: baseSidecar.OutboundTrafficPolicy,
-	}
-
-}
-
-// ParseVirtualHostResourceName parse on-demand virtual hosts discovery requests.
-// For service port with protocol sniffing enabled, routeName is at the format of FQDN:port
-// Otherwise, the routeName is identical to port.
-// TODO(wangjian.pg 2023.10.08) refactor this function to improve readability.
-func ParseVirtualHostResourceName(resourceName string) (int, string, string, error) {
-	// not support wildcard character
-	sep := strings.LastIndexByte(resourceName, '/')
-	if sep == -1 {
-		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
-	}
-
-	routeName := resourceName[:sep]
-	vhdsName := resourceName[sep+1:]
-
-	vhdsDomain, _, _ := strings.Cut(vhdsName, ":")
-	_, portStr, found := strings.Cut(routeName, ":")
-	if !found {
-		portStr = routeName
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
-	}
-
-	// port, request host, host domain name.
-	return port, vhdsName, vhdsDomain, nil
-}
-
-// trimSidecarEgress ...
-func trimSidecarEgress(egress []*networking.IstioEgressListener,
-	resourceNames []string, dnsDomain string) []*networking.IstioEgressListener {
-
-	port2Hosts := make(map[int][]string) // port number => hostnames
-
-	allHosts := make([]string, 0, len(resourceNames))
-	for _, r := range resourceNames {
-		port, _, hostname, err := ParseVirtualHostResourceName(r)
-		if err != nil {
-			continue
-		}
-		port2Hosts[port] = append(port2Hosts[port], hostname)
-		allHosts = append(allHosts, hostname)
-	}
-
-	out := make([]*networking.IstioEgressListener, 0, len(egress))
-	for _, e := range egress {
-		if e.Port != nil && protocol.Parse(e.Port.Protocol) != protocol.HTTP {
-			// Keep the ports with non-HTTP protocol
-			// TODO(wangjian.pg 20230926)
-			// 1. HTTPS, GRPC, HTTP2 can also work?
-			// 2. protocol with HTTP_PROXY can also be trimmed.
-			out = append(out, e)
-			continue
-		}
-
-		// filter out if the port is not exist in routes.
-		if _, ok := port2Hosts[int(e.Port.GetNumber())]; e.Port != nil && !ok {
-			continue
-		}
-		var hosts []string
-		if e.Port != nil {
-			hosts = getIntersectionHosts(e.Hosts, port2Hosts[int(e.Port.GetNumber())], dnsDomain)
-		} else {
-			hosts = getIntersectionHosts(e.Hosts, allHosts, dnsDomain)
-		}
-		if len(hosts) == 0 {
-			continue
-		}
-		trimmedListener := e.DeepCopy()
-		trimmedListener.Hosts = hosts
-		out = append(out, trimmedListener)
-	}
-	if len(out) == 0 {
-		out = append(out, &networking.IstioEgressListener{
-			Hosts: []string{denyAll},
-		})
-	}
-	return out
-}
-
-// TODO(wangjian.pg 2023.10.8) refactor the following comments.
-// getIntersectionHosts listenerHosts is configured by sidecarScope cr, and the onDemandHosts is dynamically updated
-// by on-demand virtual host discovery requests(VHDS). listenerHosts usually have a larger scope and some of them are
-// not needed, onDemandHosts are needed on fact, get the intersection of sets.
-// Test should cover at least the following cases:
-// 1. Access service in the namespace of the pod/sidecar proxy.
-// 2. Access service in the other namespace.
-// 3. Access hostname with FQDN.
-// 4. Access external services.
-// 5. Cross cluster access.
-// 6. Access hostname with '.svc.' of external service.
-func getIntersectionHosts(listenerHosts []string, onDemandHosts []string, dnsDomain string) []string {
-	if len(onDemandHosts) == 0 {
-		return nil
-	}
-	var proxyCurrentNamespace, domainSuffix string
-	if idx := strings.Index(dnsDomain, ".svc"); idx == -1 || idx < 1 {
-		log.Errorf("illegal dnsDomain %s", dnsDomain)
-		return nil
-	} else {
-		proxyCurrentNamespace = dnsDomain[:idx]
-		domainSuffix = dnsDomain[idx:]
-	}
-
-	allows := make(map[string]sets.Set[string]) // key is namespace
-	var allowAll bool
-	for _, listenerHost := range listenerHosts {
-		if listenerHost == "*/*" {
-			allowAll = true
-			break
-		}
-
-		parts := strings.Split(listenerHost, "/")
-		if len(parts) != 2 {
-			log.Errorf("illegal host in sidecar resource: %s, "+
-				"host must be of form namespace/dnsName", listenerHost)
-			continue
-		}
-
-		namespace, hostname := parts[0], parts[1]
-		if namespace == currentNamespace {
-			namespace = proxyCurrentNamespace
-		}
-
-		svcs, ok := allows[namespace]
-		if !ok {
-			svcs := sets.New[string]()
-			allows[namespace] = svcs
-		}
-		svcs.Insert(hostname)
-	}
-
-	out := sets.New[string]()
-
-	// hostAllowedBySidecarScope checks whether the hostname is allowed aaccording to sidecarScope,
-	// The first return value is whether the hostname is allowed  and the second is whether it is
-	// allowed by a wildcard namespace match.
-	hostAllowedBySidecarScope := func(hostNamespace, hostname string) (bool, bool) {
-		if allowAll || allows[wildcardNamespace].Contains(hostname) {
-			return true, true
-		}
-
-		if allows[hostNamespace].Contains(wildcardDomain) ||
-			allows[hostNamespace].Contains(hostname) {
-			return true, false
-		}
-
-		for k := range allows[hostNamespace] {
-			if host.Name(hostname).SubsetOf(host.Name(k)) {
-				return true, false
-			}
-		}
-
-		for k := range allows[wildcardNamespace] {
-			if host.Name(hostname).SubsetOf(host.Name(k)) {
-				return true, true
-			}
-		}
-		return false, false
-	}
-
-	for _, hostname := range onDemandHosts {
-		shortName := hostname
-		// TODO(wangjian.pg 20230926) may check FQDN by dnsDomain
-		if idx := strings.Index(hostname, ".svc"); idx != -1 {
-			shortName = hostname[:idx]
-		}
-
-		var hostNamespace string
-		if parts := strings.Split(shortName, "."); len(parts) == 2 {
-			shortName, hostNamespace = parts[0], parts[1]
-		} else if len(parts) == 1 {
-			hostNamespace = proxyCurrentNamespace
-		}
-
-		if hostNamespace != "" {
-			// The hostname maybe a k8s service name, convert it to FQDN since
-			// hostname should in the format of "namespace/FQDN" according to the
-			// specification of `networking.Sidecar.IstioEgressListeners.Hosts.`
-			fqdn := shortName + "." + hostNamespace + domainSuffix
-			if ok, _ := hostAllowedBySidecarScope(hostNamespace, fqdn); ok {
-				out.Insert(hostNamespace + "/" + fqdn)
-			}
-		}
-
-		// hostname maybe a service from an external registry specified by `ServiceEntry`, e.g. foo.bar.
-		if ok, wildcardNamespace := hostAllowedBySidecarScope(proxyCurrentNamespace, hostname); ok {
-			if wildcardNamespace {
-				out.Insert("*/" + hostname)
-			} else {
-				out.Insert(proxyCurrentNamespace + "/" + hostname)
-			}
-		}
-
-	}
-	return out.UnsortedList()
 }
 
 // SetGatewaysForProxy merges the Gateway objects associated with this
