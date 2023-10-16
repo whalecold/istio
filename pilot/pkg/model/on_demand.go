@@ -156,6 +156,7 @@ func trimSidecarEgress(egress []*networking.IstioEgressListener, hostsByPort map
 
 	if len(hostsByPort) > 0 {
 		trimmedListener := listenerWithOmittedPort.DeepCopy()
+		trimmedListener.Hosts = nil
 		for _, hosts := range hostsByPort {
 			trimmedListener.Hosts = append(trimmedListener.Hosts, hosts...)
 		}
