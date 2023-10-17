@@ -681,6 +681,10 @@ func (s *DiscoveryServer) computeProxyState(proxy *model.Proxy, request *model.P
 		gateway = true
 	} else {
 		push = request.Push
+		// TODO(wangjian.pg 2023.10.17)
+		// The `SidecarScope` and `Gateways` will be recomputed for each delta subscription request. And for proxies that
+		// enables on-demand, this recomputations appears to be redundant for every virtual host and cluster subscription/discovery
+		// request. We may need to distinguish cases more carefully to reduce unnecessary computation and latency.
 		if len(request.ConfigsUpdated) == 0 {
 			sidecar = true
 			gateway = true
@@ -698,11 +702,6 @@ func (s *DiscoveryServer) computeProxyState(proxy *model.Proxy, request *model.P
 			if sidecar && gateway {
 				break
 			}
-		}
-		// Triggers recompute of the `SidecarScope` so that the proxy's `OnDemandSidecarScope`
-		// is re-trimmed when a new VHDS subscription request is received.
-		if request.Delta.TypeUrl == v3.VirtualHostType && !request.Delta.IsEmpty() {
-			sidecar = true
 		}
 	}
 	// compute the sidecarscope for both proxy type whenever it changes.
