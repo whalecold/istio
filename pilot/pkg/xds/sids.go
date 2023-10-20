@@ -47,7 +47,7 @@ func (l SidsGenerator) Generate(proxy *model.Proxy, watch *model.WatchedResource
 	model.Resources, model.XdsLogDetails, error,
 ) {
 	// if there is no endpoint changed, return directly.
-	if !edsNeedsPush(req.ConfigsUpdated) {
+	if !edsNeedsPush(req.ConfigsUpdated) && !rdsNeedsPush(req) {
 		return nil, model.DefaultXdsLogDetails, nil
 	}
 	resources := model.Resources{}
