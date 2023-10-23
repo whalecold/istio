@@ -774,6 +774,9 @@ const (
 
 	// Router type is used for standalone proxies acting as L7/L4 routers
 	Router NodeType = "router"
+
+	// Observer observe the service instances info of the mesh.
+	Observer = "observer"
 )
 
 var NodeTypes = [...]NodeType{SidecarProxy, Router}
@@ -791,7 +794,7 @@ const (
 // IsApplicationNodeType verifies that the NodeType is one of the declared constants in the model
 func IsApplicationNodeType(nType NodeType) bool {
 	switch nType {
-	case SidecarProxy, Router:
+	case SidecarProxy, Router, Observer:
 		return true
 	default:
 		return false
