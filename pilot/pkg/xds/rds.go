@@ -36,6 +36,7 @@ var skippedRdsConfigs = map[kind.Kind]struct{}{
 	kind.WasmPlugin:            {},
 	kind.Telemetry:             {},
 	kind.ProxyConfig:           {},
+	kind.RateLimit:             {},
 }
 
 func rdsNeedsPush(req *model.PushRequest) bool {

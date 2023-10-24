@@ -279,7 +279,6 @@ func update(ic versionedclient.Interface, sc gatewayapiclient.Interface, cfg con
 
 func updateStatus(ic versionedclient.Interface, sc gatewayapiclient.Interface, cfg config.Config, objMeta metav1.ObjectMeta) (metav1.Object, error) {
 	switch cfg.GroupVersionKind {
-
 	case collections.IstioExtensionsV1Alpha1Wasmplugins.Resource().GroupVersionKind():
 		return ic.ExtensionsV1alpha1().WasmPlugins(cfg.Namespace).UpdateStatus(context.TODO(), &clientextensionsv1alpha1.WasmPlugin{
 			ObjectMeta: objMeta,

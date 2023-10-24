@@ -42,6 +42,7 @@ const (
 	WasmPlugin
 	WorkloadEntry
 	WorkloadGroup
+	RateLimit
 )
 
 func (k Kind) String() string {
@@ -114,12 +115,18 @@ func (k Kind) String() string {
 		return "WorkloadEntry"
 	case WorkloadGroup:
 		return "WorkloadGroup"
+	case RateLimit:
+		return "RateLimit"
 	default:
 		return "Unknown"
 	}
 }
 
 func FromGvk(gvk config.GroupVersionKind) Kind {
+	if gvk.Kind == "RateLimit" && gvk.Group == "istio.v3alpha1.javaagent" && gvk.Version == "v3alpha1" {
+		return RateLimit
+	}
+
 	if gvk.Kind == "AuthorizationPolicy" && gvk.Group == "security.istio.io" && gvk.Version == "v1beta1" {
 		return AuthorizationPolicy
 	}

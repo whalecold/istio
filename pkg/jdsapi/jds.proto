@@ -1,0 +1,75 @@
+// Copyright Istio Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+// Keep this package for backward compatibility.
+package istio.v3alpha1.javaagent;
+
+option go_package = "istio.io/api/v3alpha1";
+option java_generic_services = true;
+option java_multiple_files = true;
+
+// Java Configuration
+message Configuration {
+  string name = 1;
+  repeated MseRateLimit mse_rate_limit = 2;
+}
+
+message MseRateLimit {
+  repeated Policy policies = 1;
+  Limiter limiter = 2;
+}
+
+message Limiter {
+  string max_tokens = 1;
+  string tokens_per_fill = 2;
+  string fill_interval = 3;
+}
+
+message Policy {
+  repeated HttpMatch http_match = 1;
+}
+
+message HttpMatch {
+  map<string, StringMatch> headers = 1;
+  StringMatch principal = 2;
+  StringMatch path = 3;
+  StringMatch method = 4;
+}
+
+message StringMatch {
+  bool invert = 1;
+
+  oneof match_type {
+
+    // exact string match
+    string exact = 2;
+
+    // prefix-based match
+    string prefix = 3;
+
+    // RE2 style regex-based match (https://github.com/google/re2/wiki/Syntax).
+    string regex = 4;
+
+    // contains match
+    string contains = 5;
+
+    // greater than match
+    string greater = 6;
+
+    // less than match
+    string less = 7;
+  }
+}

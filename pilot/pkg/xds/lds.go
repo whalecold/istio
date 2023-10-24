@@ -36,6 +36,7 @@ var skippedLdsConfigs = map[model.NodeType]map[kind.Kind]struct{}{
 		kind.WorkloadEntry: {},
 		kind.Secret:        {},
 		kind.ProxyConfig:   {},
+		kind.RateLimit:     {},
 	},
 	model.SidecarProxy: {
 		kind.Gateway:       {},
@@ -43,6 +44,7 @@ var skippedLdsConfigs = map[model.NodeType]map[kind.Kind]struct{}{
 		kind.WorkloadEntry: {},
 		kind.Secret:        {},
 		kind.ProxyConfig:   {},
+		kind.RateLimit:     {},
 	},
 }
 

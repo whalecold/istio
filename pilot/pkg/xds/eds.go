@@ -363,6 +363,7 @@ var skippedEdsConfigs = map[kind.Kind]struct{}{
 	kind.Telemetry:             {},
 	kind.WasmPlugin:            {},
 	kind.ProxyConfig:           {},
+	kind.RateLimit:             {},
 }
 
 func edsNeedsPush(updates model.XdsUpdates) bool {
