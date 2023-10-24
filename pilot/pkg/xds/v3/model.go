@@ -40,6 +40,11 @@ const (
 
 	// nolint
 	HttpProtocolOptionsType = "envoy.extensions.upstreams.http.v3.HttpProtocolOptions"
+
+	// ByteDanceAPITypePrefix ...
+	ByteDanceAPITypePrefix = "type.bytedance.com/"
+	// JavaConfigurationType ...
+	JavaConfigurationType = ByteDanceAPITypePrefix + "istio.v3alpha1.javaagent.Configuration"
 )
 
 // GetShortType returns an abbreviated form of a type, useful for logging or human friendly messages
@@ -61,6 +66,8 @@ func GetShortType(typeURL string) string {
 		return "PCDS"
 	case ExtensionConfigurationType:
 		return "ECDS"
+	case JavaConfigurationType:
+		return "JDS"
 	default:
 		return typeURL
 	}
@@ -87,6 +94,8 @@ func GetMetricType(typeURL string) string {
 		return "ecds"
 	case BootstrapType:
 		return "bds"
+	case JavaConfigurationType:
+		return "jds"
 	default:
 		return typeURL
 	}
@@ -112,6 +121,8 @@ func GetResourceType(shortType string) string {
 		return ProxyConfigType
 	case "ECDS":
 		return ExtensionConfigurationType
+	case "JDS":
+		return JavaConfigurationType
 	default:
 		return shortType
 	}

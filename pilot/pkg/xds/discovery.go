@@ -588,6 +588,8 @@ func (s *DiscoveryServer) InitGenerators(env *model.Environment, systemNameSpace
 	s.Generators["event"] = s.StatusGen
 	s.Generators[v3.DebugType] = NewDebugGen(s, systemNameSpace, internalDebugMux)
 	s.Generators[v3.BootstrapType] = &BootstrapGenerator{Server: s}
+
+	s.Generators[v3.JavaConfigurationType] = &JdsGenerator{Server: s}
 }
 
 // Shutdown shuts down DiscoveryServer components.

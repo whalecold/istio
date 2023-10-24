@@ -414,6 +414,28 @@ var (
 		}.MustBuild(),
 	}.MustBuild()
 
+	// RateLimit describes the collection rate limit
+	// RateLimit is a temporary type used to perform XDS type
+	// this version we use configmap to store info, so there are some hack
+	// way to deal with code logic
+	// Todo: use java configuration's own CRD
+	RateLimit = collection.Builder{
+		Name:         "istio/v3/javaagent/v3alpha1/ratelimit",
+		VariableName: "IstioV3JavaagentV3alpha1RateLimits",
+		Resource: resource.Builder{
+			Group:   "istio.v3alpha1.javaagent",
+			Kind:    "RateLimit",
+			Plural:  "ratelimits",
+			Version: "v3alpha1",
+			Proto:   "istio.v3alpha1.javaagent.v3alpha1.RateLimit",
+			// java configuration actually reflect configmap, but we won't use this reflect in this version
+			ReflectType:   reflect.TypeOf(&k8sioapicorev1.ConfigMap{}).Elem(),
+			ProtoPackage:  "istio/v3/javaagent/v3alpha1",
+			ClusterScoped: false,
+			ValidateProto: validation.EmptyValidate,
+		}.MustBuild(),
+	}.MustBuild()
+
 	// K8SCoreV1Endpoints describes the collection k8s/core/v1/endpoints
 	K8SCoreV1Endpoints = collection.Builder{
 		Name:         "k8s/core/v1/endpoints",
@@ -813,6 +835,8 @@ var (
 			MustAdd(K8SGatewayApiV1Beta1Gateways).
 			MustAdd(K8SGatewayApiV1Beta1Httproutes).
 			Build()
+
+	RateLimitAPI = collection.NewSchemasBuilder().MustAdd(RateLimit).Build()
 
 	// Deprecated contains only collections used by that will soon be used by nothing.
 	Deprecated = collection.NewSchemasBuilder().
