@@ -15,11 +15,10 @@
 package xds
 
 import (
-	"encoding/json"
-	"fmt"
 	"strings"
 
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	"github.com/golang/protobuf/jsonpb"
 
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pilot/pkg/util/protoconv"
@@ -126,16 +125,14 @@ func (j *JdsGenerator) Generate(_ *model.Proxy, w *model.WatchedResource, req *m
 			continue
 		}
 
-		var mrl []*v3alpha1.MseRateLimit
-		if err := json.Unmarshal([]byte(mseRateLimit), &mrl); err != nil {
+		c := &v3alpha1.Configuration{}
+		if err := jsonpb.UnmarshalString(mseRateLimit, c); err != nil {
 			return nil, model.DefaultXdsLogDetails, err
 		}
 
+		c.Name = jc.Name + "." + jc.Namespace
 		rateLimits = append(rateLimits, &discovery.Resource{
-			Resource: protoconv.MessageToAny(&v3alpha1.Configuration{
-				Name:         fmt.Sprintf("%v.%v", jc.Name, jc.Namespace),
-				MseRateLimit: mrl,
-			}),
+			Resource: protoconv.MessageToAny(c),
 		})
 	}
 
