@@ -36,7 +36,9 @@ func (node *Proxy) trimSidecarScopeByOnDemandHosts(ps *PushContext) {
 		return
 	}
 
+	node.RLock()
 	watched, ok := node.WatchedResources[v3.VirtualHostType]
+	node.RUnlock()
 	if !ok || len(watched.ResourceNames) == 0 {
 		// Just left the `OnDemandSidecarScope` as nil if
 		// no virtual hosts discovery requests have received.
@@ -96,7 +98,7 @@ func ParseVirtualHostResourceName(resourceName string) (int, string, string, err
 	// not support wildcard character
 	sep := strings.LastIndexByte(resourceName, '/')
 	if sep == -1 {
-		return 0, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
+		return -1, "", "", fmt.Errorf("invalid format resource name %s", resourceName)
 	}
 
 	routeName := resourceName[:sep]
