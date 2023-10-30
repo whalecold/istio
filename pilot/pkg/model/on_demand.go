@@ -67,13 +67,7 @@ func (node *Proxy) trimSidecarScopeByOnDemandHosts(ps *PushContext) {
 		return
 	}
 
-	trimmedEgressListeners, err := trimSidecarEgress(baseSidecar.Egress, hostsByPort)
-	if err != nil {
-		log.Errorf("trim sidecar egress by on-demand requested host failed, fallback to use the entire scope, err: %s", err.Error())
-		node.OnDemandSidecarScope = node.SidecarScope
-		return
-	}
-
+	trimmedEgressListeners := trimSidecarEgress(baseSidecar.Egress, hostsByPort)
 	trimmedSidecar := &config.Config{
 		Meta: config.Meta{
 			Name:      onDemandTrimmedSidecarName(node.SidecarScope.Name),
@@ -93,7 +87,6 @@ func (node *Proxy) trimSidecarScopeByOnDemandHosts(ps *PushContext) {
 // ParseVirtualHostResourceName parse on-demand virtual hosts discovery requests.
 // For service port with protocol sniffing enabled, routeName is at the format of FQDN:port
 // Otherwise, the routeName is identical to port.
-// TODO(wangjian.pg 2023.10.08) refactor this function to improve readability.
 func ParseVirtualHostResourceName(resourceName string) (int, string, string, error) {
 	// not support wildcard character
 	sep := strings.LastIndexByte(resourceName, '/')
@@ -119,11 +112,9 @@ func ParseVirtualHostResourceName(resourceName string) (int, string, string, err
 }
 
 // trimSidecarEgress ...
-func trimSidecarEgress(egress []*networking.IstioEgressListener, hostsByPort map[int][]string) ([]*networking.IstioEgressListener, error) {
+func trimSidecarEgress(egress []*networking.IstioEgressListener, hostsByPort map[int][]string) []*networking.IstioEgressListener {
 	if len(hostsByPort) == 0 {
-		return []*networking.IstioEgressListener{{
-			Hosts: []string{denyAll},
-		}}, nil
+		return []*networking.IstioEgressListener{{Hosts: []string{denyAll}}}
 	}
 
 	out := make([]*networking.IstioEgressListener, 0, len(egress))
@@ -165,7 +156,7 @@ func trimSidecarEgress(egress []*networking.IstioEgressListener, hostsByPort map
 		out = append(out, trimmedListener)
 	}
 
-	return out, nil
+	return out
 }
 
 func getVisableOnDemandHosts(onDemandHosts []string, dnsDomain string, visableServices map[host.Name]*Service) (map[int][]string, error) {
@@ -184,10 +175,10 @@ func getVisableOnDemandHosts(onDemandHosts []string, dnsDomain string, visableSe
 		if err != nil {
 			continue
 		}
+
 		shortName := hostname
-		// TODO(wangjian.pg 20230926) may check FQDN by dnsDomain
-		if idx := strings.Index(hostname, ".svc"); idx != -1 {
-			shortName = hostname[:idx]
+		if strings.HasSuffix(hostname, ".svc") || strings.HasSuffix(hostname, domainSuffix) {
+			shortName, _, _ = strings.Cut(hostname, ".svc")
 		}
 
 		var hostNamespace string
@@ -197,6 +188,7 @@ func getVisableOnDemandHosts(onDemandHosts []string, dnsDomain string, visableSe
 			hostNamespace = proxyCurrentNamespace
 		}
 
+		visableAsKubeService := false
 		if hostNamespace != "" {
 			// The hostname maybe a k8s service name, convert it to FQDN since
 			// hostname should in the format of "namespace/FQDN" according to the
@@ -204,15 +196,23 @@ func getVisableOnDemandHosts(onDemandHosts []string, dnsDomain string, visableSe
 			fqdn := shortName + "." + hostNamespace + domainSuffix
 			if service, visable := visableServices[host.Name(fqdn)]; visable {
 				for _, svcPort := range service.Ports {
+					// TODO(wangjian.pg 20231030) do we need to check the Protocol of the svcPort?
 					if svcPort.Port == port {
 						hostsByPort[port] = append(hostsByPort[port], hostNamespace+"/"+fqdn)
+						visableAsKubeService = true
 						break
 					}
 				}
 			}
 		}
 
-		// hostname maybe a service from an external registry specified by `ServiceEntry`, e.g. foo.bar.
+		// hostname specified by `ServiceEntry` SHOULD NOT conflict with the one of k8s service
+		// and we take the k8s service over `ServiceEntry` here.
+		if visableAsKubeService {
+			continue
+		}
+
+		// hostname maybe a service from an external registry specified by `ServiceEntry`, e.g. foo.bar.remote.cluster
 		if service, visable := visableServices[host.Name(hostname)]; visable {
 			for _, svcPort := range service.Ports {
 				if svcPort.Port == port {
