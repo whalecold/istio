@@ -101,7 +101,7 @@ func (j *JdsGenerator) Generate(_ *model.Proxy, w *model.WatchedResource, req *m
 		return nil, model.DefaultXdsLogDetails, nil
 	}
 
-	var rateLimits model.Resources
+	rateLimits := model.Resources{}
 	// get java configuration configmap, if user not set ResourceNames, return all
 	serviceList := buildServiceList(w.ResourceNames)
 
