@@ -98,6 +98,7 @@ func ParseVirtualHostResourceName(resourceName string) (int, string, string, err
 	vhdsName := resourceName[sep+1:]
 
 	vhdsDomain, _, _ := strings.Cut(vhdsName, ":")
+	// routeName may be sniffing.
 	_, portStr, found := strings.Cut(routeName, ":")
 	if !found {
 		portStr = routeName
