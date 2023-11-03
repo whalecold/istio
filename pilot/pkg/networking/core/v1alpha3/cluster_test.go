@@ -2829,8 +2829,14 @@ func TestCopyServiceWithPortFilter(t *testing.T) {
 			},
 			ports: map[int]bool{
 				9080: true,
+				443:  true,
 			},
 			want: model.PortList{
+				{
+					Name:     "https",
+					Port:     443,
+					Protocol: protocol.HTTP,
+				},
 				{
 					Name:     "http-server",
 					Port:     9080,
@@ -2861,7 +2867,7 @@ func TestCopyServiceWithPortFilter(t *testing.T) {
 			ports: map[int]bool{
 				9081: true,
 			},
-			want: model.PortList{},
+			want: nil,
 		},
 		{
 			svc: nil,
