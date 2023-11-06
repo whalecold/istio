@@ -661,7 +661,8 @@ type NodeMetadata struct {
 	// The istiod address when running ASM Managed Control Plane.
 	CloudrunAddr string `json:"CLOUDRUN_ADDR,omitempty"`
 
-	// OnDemandXds ...
+	// OnDemandXds indicates whether the proxy wants to enable on-demand virtual hosts and cluster discovery.
+	// The on-demand loading can only be enabled with delta xDS protocol.
 	OnDemandXds bool `json:"ON_DEMAND_XDS,omitempty"`
 
 	// Contains a copy of the raw metadata. This is needed to lookup arbitrary values.
@@ -977,8 +978,6 @@ func ParseServiceNodeWithMetadata(nodeID string, metadata *NodeMetadata) (*Proxy
 	if len(parts) != 4 {
 		return out, fmt.Errorf("missing parts in the service node %q", nodeID)
 	}
-
-	out.OnDemandEnable = metadata.OnDemandXds
 
 	if !IsApplicationNodeType(NodeType(parts[0])) {
 		return out, fmt.Errorf("invalid node type (valid types: sidecar, router in the service node %q", nodeID)

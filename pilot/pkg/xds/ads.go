@@ -647,6 +647,16 @@ func (s *DiscoveryServer) initializeProxy(con *Connection) error {
 	if err := s.WorkloadEntryController.RegisterWorkload(proxy, con.connectedAt); err != nil {
 		return err
 	}
+
+	if proxy.Metadata.OnDemandXds {
+		if con.DeltaStream != nil {
+			proxy.OnDemandEnable = true
+		} else {
+			log.Warnf("try to enable on-demand virtual host and cluster discovery on ADS and StoW protocol, "+
+				"fallback to use the StoW, %s, %s", proxy.ID, con.peerAddr)
+		}
+	}
+
 	s.computeProxyState(proxy, nil)
 	// Discover supported IP Versions of proxy so that appropriate config can be delivered.
 	proxy.DiscoverIPMode()
