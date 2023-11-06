@@ -243,6 +243,7 @@ func (conn *Connection) sendDelta(res *discovery.DeltaDiscoveryResponse) error {
 		for _, rc := range res.Resources {
 			sz += len(rc.Resource.Value)
 		}
+		xdsPushBytesTotal.WithLabelValues(deltaConnection, v3.GetMetricType(res.TypeUrl)).Add(float64(sz))
 		if res.Nonce != "" && !strings.HasPrefix(res.TypeUrl, v3.DebugType) {
 			conn.proxy.Lock()
 			if conn.proxy.WatchedResources[res.TypeUrl] == nil {

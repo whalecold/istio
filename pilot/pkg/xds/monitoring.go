@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -29,7 +30,11 @@ var (
 	errTag     = monitoring.MustCreateLabel("err")
 	nodeTag    = monitoring.MustCreateLabel("node")
 	typeTag    = monitoring.MustCreateLabel("type")
+	xdsTag     = monitoring.MustCreateLabel("xds")
 	versionTag = monitoring.MustCreateLabel("version")
+
+	adsConnection   = "ads"
+	deltaConnection = "delta"
 
 	// pilot_total_xds_rejects should be used instead. This is for backwards compatibility
 	cdsReject = monitoring.NewGauge(
@@ -98,6 +103,13 @@ var (
 		"Pilot XDS response write timeouts.",
 	)
 
+	xdsPushBytesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "pilot_xds_push_bytes_total",
+			Help: "Pilot XDS response write size.",
+		},
+		[]string{"xds", "kind"},
+	)
 	// Covers xds_builderr and xds_senderr for xds in {lds, rds, cds, eds}.
 	pushes = monitoring.NewSum(
 		"pilot_xds_pushes",
@@ -282,6 +294,7 @@ func recordPushTime(xdsType string, duration time.Duration) {
 }
 
 func init() {
+	prometheus.MustRegister(xdsPushBytesTotal)
 	monitoring.MustRegister(
 		cdsReject,
 		edsReject,

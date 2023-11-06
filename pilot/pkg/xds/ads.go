@@ -929,6 +929,7 @@ func (conn *Connection) send(res *discovery.DiscoveryResponse) error {
 		for _, rc := range res.Resources {
 			sz += len(rc.Value)
 		}
+		xdsPushBytesTotal.WithLabelValues(adsConnection, v3.GetMetricType(res.TypeUrl)).Add(float64(sz))
 		if res.Nonce != "" && !strings.HasPrefix(res.TypeUrl, v3.DebugType) {
 			conn.proxy.Lock()
 			if conn.proxy.WatchedResources[res.TypeUrl] == nil {
