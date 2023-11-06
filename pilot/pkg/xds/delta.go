@@ -277,6 +277,20 @@ func (s *DiscoveryServer) processDeltaRequest(req *discovery.DeltaDiscoveryReque
 	if s.StatusReporter != nil {
 		s.StatusReporter.RegisterEvent(con.conID, req.TypeUrl, req.ResponseNonce)
 	}
+
+	// A synthetic wildcard will be received when on-demand loading is enabled and cluster discovery is subscribed
+	// through the  ADS grpc stream. Drop it in case of disrupting the behavior of on-demand loading.
+	// TODO(wangjian.pg 2023.11.06) remove the hardcoded workaround when we find a way to fix the envoy behavior.
+	if con.proxy.OnDemandEnable {
+		for i, resourceName := range req.ResourceNamesSubscribe {
+			if resourceName == "*" {
+				req.ResourceNamesSubscribe = append(req.ResourceNamesSubscribe[:i],
+					req.ResourceNamesSubscribe[i+1:]...)
+				break
+			}
+		}
+	}
+
 	shouldRespond, delta := s.shouldRespondDelta(con, req)
 	if !shouldRespond {
 		return nil
