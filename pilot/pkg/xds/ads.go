@@ -649,7 +649,7 @@ func (s *DiscoveryServer) initializeProxy(con *Connection) error {
 	}
 
 	if proxy.Metadata.OnDemandXds {
-		if con.DeltaStream != nil {
+		if con.deltaStream != nil {
 			proxy.OnDemandEnable = true
 		} else {
 			log.Warnf("try to enable on-demand virtual host and cluster discovery on ADS and StoW protocol, "+
