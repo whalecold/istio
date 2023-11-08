@@ -59,10 +59,10 @@ func (node *Proxy) trimSidecarScopeByOnDemandHosts(ps *PushContext) {
 		}
 	}
 
-	hostsByPort, err := getVisableOnDemandHosts(watched.ResourceNames, node.DNSDomain,
+	hostsByPort, err := getVisibleOnDemandHosts(watched.ResourceNames, node.DNSDomain,
 		node.SidecarScope.servicesByHostname)
 	if err != nil {
-		log.Errorf("get visable on-demand host failed, fallback to use the entire scope, err: %s", err.Error())
+		log.Errorf("get visible on-demand host failed, fallback to use the entire scope, err: %s", err.Error())
 		node.OnDemandSidecarScope = node.SidecarScope
 		return
 	}
@@ -113,7 +113,8 @@ func ParseVirtualHostResourceName(resourceName string) (int, string, string, err
 }
 
 // trimSidecarEgress ...
-func trimSidecarEgress(egress []*networking.IstioEgressListener, hostsByPort map[int][]string) []*networking.IstioEgressListener {
+func trimSidecarEgress(egress []*networking.IstioEgressListener,
+	hostsByPort map[int][]string) []*networking.IstioEgressListener {
 	if len(hostsByPort) == 0 {
 		return []*networking.IstioEgressListener{{Hosts: []string{denyAll}}}
 	}
@@ -160,7 +161,8 @@ func trimSidecarEgress(egress []*networking.IstioEgressListener, hostsByPort map
 	return out
 }
 
-func getVisableOnDemandHosts(onDemandHosts []string, dnsDomain string, visableServices map[host.Name]*Service) (map[int][]string, error) {
+func getVisibleOnDemandHosts(onDemandHosts []string, dnsDomain string,
+	visibleServices map[host.Name]*Service) (map[int][]string, error) {
 	var proxyCurrentNamespace, domainSuffix string
 	if idx := strings.Index(dnsDomain, ".svc"); idx == -1 || idx < 1 {
 		return nil, errors.Errorf("illegal dnsDomain %s", dnsDomain)
@@ -189,18 +191,18 @@ func getVisableOnDemandHosts(onDemandHosts []string, dnsDomain string, visableSe
 			hostNamespace = proxyCurrentNamespace
 		}
 
-		visableAsKubeService := false
+		visibleAsKubeService := false
 		if hostNamespace != "" {
 			// The hostname maybe a k8s service name, convert it to FQDN since
 			// hostname should in the format of "namespace/FQDN" according to the
 			// specification of `networking.Sidecar.IstioEgressListeners.Hosts.`
 			fqdn := shortName + "." + hostNamespace + domainSuffix
-			if service, visable := visableServices[host.Name(fqdn)]; visable {
+			if service, visible := visibleServices[host.Name(fqdn)]; visible {
 				for _, svcPort := range service.Ports {
 					// TODO(wangjian.pg 20231030) do we need to check the Protocol of the svcPort?
 					if svcPort.Port == port {
 						hostsByPort[port] = append(hostsByPort[port], hostNamespace+"/"+fqdn)
-						visableAsKubeService = true
+						visibleAsKubeService = true
 						break
 					}
 				}
@@ -209,12 +211,12 @@ func getVisableOnDemandHosts(onDemandHosts []string, dnsDomain string, visableSe
 
 		// hostname specified by `ServiceEntry` SHOULD NOT conflict with the one of k8s service
 		// and we take the k8s service over `ServiceEntry` here.
-		if visableAsKubeService {
+		if visibleAsKubeService {
 			continue
 		}
 
 		// hostname maybe a service from an external registry specified by `ServiceEntry`, e.g. foo.bar.remote.cluster
-		if service, visable := visableServices[host.Name(hostname)]; visable {
+		if service, visible := visibleServices[host.Name(hostname)]; visible {
 			for _, svcPort := range service.Ports {
 				if svcPort.Port == port {
 					hostsByPort[port] = append(hostsByPort[port], service.Attributes.Namespace+"/"+hostname)

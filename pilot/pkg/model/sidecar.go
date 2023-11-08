@@ -32,7 +32,6 @@ import (
 
 const (
 	wildcardNamespace = "*"
-	wildcardDomain    = "*"
 	currentNamespace  = "."
 	denyAll           = "~/*"
 	wildcardService   = host.Name("*")
