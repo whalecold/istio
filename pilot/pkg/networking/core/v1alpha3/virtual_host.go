@@ -115,7 +115,6 @@ func buildVhdsSidecarOutboundVirtualHosts(
 	node *model.Proxy,
 	req *model.PushRequest,
 	listenerPort int,
-	resources map[string]*vhdsRequest,
 	efKeys []string,
 ) map[string]*route.VirtualHost {
 	routeName := strconv.Itoa(listenerPort)
@@ -143,7 +142,7 @@ func buildVhdsSidecarOutboundVirtualHostsResource(
 ) []*discovery.Resource {
 	routeName := strconv.Itoa(listenerPort)
 	out := make([]*discovery.Resource, 0, len(resources))
-	virtualHosts := buildVhdsSidecarOutboundVirtualHosts(node, req, listenerPort, resources, efKeys)
+	virtualHosts := buildVhdsSidecarOutboundVirtualHosts(node, req, listenerPort, efKeys)
 
 	for _, resource := range resources {
 		// the domains of vhds always has the portless one, vhdsDomain is enough to query.

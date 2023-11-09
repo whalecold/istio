@@ -30,7 +30,6 @@ var (
 	errTag     = monitoring.MustCreateLabel("err")
 	nodeTag    = monitoring.MustCreateLabel("node")
 	typeTag    = monitoring.MustCreateLabel("type")
-	xdsTag     = monitoring.MustCreateLabel("xds")
 	versionTag = monitoring.MustCreateLabel("version")
 
 	adsConnection   = "ads"

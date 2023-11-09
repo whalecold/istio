@@ -23,7 +23,7 @@ import (
 )
 
 func TestTrimBySidecarByOnDemandHosts(t *testing.T) {
-	//TODO
+	// TODO
 
 }
 

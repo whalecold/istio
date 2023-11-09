@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+
 	networking "istio.io/api/networking/v1alpha3"
 	v3 "istio.io/istio/pilot/pkg/xds/v3"
 	"istio.io/istio/pkg/config"
@@ -78,7 +79,8 @@ func (node *Proxy) trimSidecarScopeByOnDemandHosts(ps *PushContext) {
 			Ingress:               baseSidecar.Ingress,
 			Egress:                trimmedEgressListeners,
 			OutboundTrafficPolicy: baseSidecar.OutboundTrafficPolicy,
-		}}
+		},
+	}
 
 	node.OnDemandSidecarScope = ConvertToSidecarScope(ps, trimmedSidecar,
 		node.ConfigNamespace)
@@ -114,7 +116,8 @@ func ParseVirtualHostResourceName(resourceName string) (int, string, string, err
 
 // trimSidecarEgress ...
 func trimSidecarEgress(egress []*networking.IstioEgressListener,
-	hostsByPort map[int][]string) []*networking.IstioEgressListener {
+	hostsByPort map[int][]string,
+) []*networking.IstioEgressListener {
 	if len(hostsByPort) == 0 {
 		return []*networking.IstioEgressListener{{Hosts: []string{denyAll}}}
 	}
@@ -162,15 +165,15 @@ func trimSidecarEgress(egress []*networking.IstioEgressListener,
 }
 
 func getVisibleOnDemandHosts(onDemandHosts []string, dnsDomain string,
-	visibleServices map[host.Name]*Service) (map[int][]string, error) {
-	var proxyCurrentNamespace, domainSuffix string
-	if idx := strings.Index(dnsDomain, ".svc"); idx == -1 || idx < 1 {
+	visibleServices map[host.Name]*Service,
+) (map[int][]string, error) {
+	splitIndex := strings.Index(dnsDomain, ".svc")
+	if splitIndex == -1 || splitIndex < 1 {
 		return nil, errors.Errorf("illegal dnsDomain %s", dnsDomain)
-	} else {
-		proxyCurrentNamespace = dnsDomain[:idx]
-		domainSuffix = dnsDomain[idx:]
 	}
 
+	proxyCurrentNamespace := dnsDomain[:splitIndex]
+	domainSuffix := dnsDomain[splitIndex:]
 	hostsByPort := make(map[int][]string)
 
 	for _, r := range onDemandHosts {
