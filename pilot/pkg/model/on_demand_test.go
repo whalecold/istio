@@ -24,7 +24,6 @@ import (
 
 func TestTrimBySidecarByOnDemandHosts(t *testing.T) {
 	// TODO
-
 }
 
 func cmpError(err1, err2 error) string {

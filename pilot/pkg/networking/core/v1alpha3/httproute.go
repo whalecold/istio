@@ -48,16 +48,14 @@ const (
 	inboundVirtualHostPrefix = string(model.TrafficDirectionInbound) + "|http|"
 )
 
-var (
-	adsVHDSConfigSource = &route.Vhds{
-		ConfigSource: &v3.ConfigSource{
-			ConfigSourceSpecifier: &v3.ConfigSource_Ads{
-				Ads: &v3.AggregatedConfigSource{},
-			},
-			ResourceApiVersion: v3.ApiVersion_V3,
+var adsVHDSConfigSource = &route.Vhds{
+	ConfigSource: &v3.ConfigSource{
+		ConfigSourceSpecifier: &v3.ConfigSource_Ads{
+			Ads: &v3.AggregatedConfigSource{},
 		},
-	}
-)
+		ResourceApiVersion: v3.ApiVersion_V3,
+	},
+}
 
 // BuildHTTPRoutes produces a list of routes for the proxy
 func (configgen *ConfigGeneratorImpl) BuildHTTPRoutes(
@@ -347,7 +345,6 @@ func buildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext
 	egressListener *model.IstioEgressListenerWrapper,
 	xdsCache model.XdsCache,
 ) ([]*route.VirtualHost, *discovery.Resource, *istio_route.Cache) {
-
 	services := egressListener.Services()
 	// To maintain correctness, we should only use the virtualservices for
 	// this listener and not all virtual services accessible to this proxy.
