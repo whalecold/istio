@@ -88,9 +88,64 @@ func (configgen *ConfigGeneratorImpl) BuildClusters(proxy *model.Proxy, req *mod
 	if features.FilterGatewayClusterConfig && proxy.Type == model.Router {
 		services = req.Push.GatewayServices(proxy)
 	} else {
-		services = proxy.SidecarScope.Services()
+		sidecarScope := proxy.SidecarScope
+		if proxy.OnDemandEnable {
+			sidecarScope = proxy.OnDemandSidecarScope
+		}
+		if sidecarScope != nil {
+			services = sidecarScope.Services()
+		}
 	}
 	return configgen.buildClusters(proxy, req, services)
+}
+
+// copyServiceWithPortFilter filters the useless port in the same service.
+func copyServiceWithPortFilter(svc *model.Service, ports map[int]bool) *model.Service {
+	if ports == nil || svc == nil {
+		return nil
+	}
+	out := svc.DeepCopy()
+	var idx int
+	for i, port := range out.Ports {
+		if ports[port.Port] {
+			out.Ports[idx] = out.Ports[i]
+			idx++
+		}
+	}
+	out.Ports = out.Ports[:idx]
+	if len(out.Ports) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (configgen *ConfigGeneratorImpl) buildWatchedClusters(proxy *model.Proxy, updates *model.PushRequest,
+	watched *model.WatchedResource,
+) ([]*discovery.Resource, model.XdsLogDetails) {
+	var services []*model.Service
+	serviceHosts := make(map[host.Name]map[int]bool)
+	for _, cluster := range watched.ResourceNames {
+		// WatchedResources.ResourceNames will contain the names of the clusters it is subscribed to. We can
+		// check with the name of our service (cluster names are in the format outbound|<port>||<hostname>).
+		_, _, svcHost, port := model.ParseSubsetKey(cluster)
+		if svcHost == "" {
+			continue
+		}
+		ports := serviceHosts[svcHost]
+		if ports == nil {
+			ports = make(map[int]bool)
+			serviceHosts[svcHost] = ports
+		}
+		ports[port] = true
+	}
+
+	for svcHost, ports := range serviceHosts {
+		service := copyServiceWithPortFilter(updates.Push.ServiceForHostname(proxy, svcHost), ports)
+		if service != nil {
+			services = append(services, service)
+		}
+	}
+	return configgen.buildClusters(proxy, updates, services)
 }
 
 // BuildDeltaClusters generates the deltas (add and delete) for a given proxy. Currently, only service changes are reflected with deltas.
@@ -98,6 +153,15 @@ func (configgen *ConfigGeneratorImpl) BuildClusters(proxy *model.Proxy, req *mod
 func (configgen *ConfigGeneratorImpl) BuildDeltaClusters(proxy *model.Proxy, updates *model.PushRequest,
 	watched *model.WatchedResource,
 ) ([]*discovery.Resource, []string, model.XdsLogDetails, bool) {
+	// This method is triggered by a delta xDS request(checked through updates.Delta.IsEmpty())
+	// and we only need to build/generate the requested clusters
+	if !updates.Delta.IsEmpty() {
+		// TODO(wangjian.pg 2023.10.11) handle the wildcard subscription.
+		// TODO(wangjian.pg 2023.10.12)for ODCDS, do not need to rebuild inbound/blackhole/passthroughCluster everytime.
+		cl, lg := configgen.buildWatchedClusters(proxy, updates, watched)
+		return cl, nil, lg, true
+	}
+
 	// if we can't use delta, fall back to generate all
 	if !shouldUseDelta(updates) {
 		cl, lg := configgen.BuildClusters(proxy, updates)
@@ -338,11 +402,13 @@ func (configgen *ConfigGeneratorImpl) buildOutboundSniDnatClusters(proxy *model.
 
 	proxyView := proxy.GetView()
 
+	// TODO(wangjian.pg 2023.10.08), should use proxy.OnDemandSidecarScope here?
 	for _, service := range proxy.SidecarScope.Services() {
 		if service.MeshExternal {
 			continue
 		}
 
+		// TODO(wangjian.pg 2023.10.08), should use proxy.OnDemandSidecarScope here?
 		destRule := proxy.SidecarScope.DestinationRule(model.TrafficDirectionOutbound, proxy, service.Hostname).GetRule()
 		for _, port := range service.Ports {
 			if port.Protocol == protocol.UDP {
@@ -396,6 +462,7 @@ func (configgen *ConfigGeneratorImpl) buildClustersFromServiceInstances(cb *Clus
 	clustersToBuild := make(map[int][]*model.ServiceInstance)
 
 	ingressPortListSet := sets.New[int]()
+	// TODO(wangjian.pg 2023.10.08), should use proxy.OnDemandSidecarScope here?
 	sidecarScope := proxy.SidecarScope
 	if sidecarScope.HasIngressListener() {
 		ingressPortListSet = getSidecarIngressPortList(proxy)
@@ -445,6 +512,7 @@ func (configgen *ConfigGeneratorImpl) buildInboundClusters(cb *ClusterBuilder, p
 	// to those listeners i.e. clusters made out of the defaultEndpoint field.
 	// If the node has no sidecarScope and has interception mode set to NONE, then we should skip the inbound
 	// clusters, because there would be no corresponding inbound listeners
+	// TODO(wangjian.pg 2023.10.08), should use proxy.OnDemandSidecarScope here?
 	sidecarScope := proxy.SidecarScope
 	noneMode := proxy.GetInterceptionMode() == model.InterceptionNone
 

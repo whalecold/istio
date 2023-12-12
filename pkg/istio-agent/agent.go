@@ -43,6 +43,7 @@ import (
 	dnsProto "istio.io/istio/pkg/dns/proto"
 	"istio.io/istio/pkg/envoy"
 	"istio.io/istio/pkg/istio-agent/grpcxds"
+	istiokeepalive "istio.io/istio/pkg/keepalive"
 	"istio.io/istio/pkg/security"
 	"istio.io/istio/pkg/wasm"
 	"istio.io/istio/security/pkg/nodeagent/cache"
@@ -88,8 +89,10 @@ var _ ready.Prober = &Agent{}
 type Agent struct {
 	proxyConfig *mesh.ProxyConfig
 
-	cfg       *AgentOptions
-	secOpts   *security.Options
+	cfg              *AgentOptions
+	secOpts          *security.Options
+	keepaliveOptions *istiokeepalive.Options
+
 	envoyOpts envoy.ProxyConfig
 
 	envoyAgent             *envoy.Agent
@@ -192,13 +195,16 @@ type AgentOptions struct {
 // NewAgent hosts the functionality for local SDS and XDS. This consists of the local SDS server and
 // associated clients to sign certificates (when not using files), and the local XDS proxy (including
 // health checking for VMs and DNS proxying).
-func NewAgent(proxyConfig *mesh.ProxyConfig, agentOpts *AgentOptions, sopts *security.Options, eopts envoy.ProxyConfig) *Agent {
+func NewAgent(proxyConfig *mesh.ProxyConfig, agentOpts *AgentOptions, sopts *security.Options,
+	eopts envoy.ProxyConfig, keepaliveOptions *istiokeepalive.Options,
+) *Agent {
 	return &Agent{
-		proxyConfig: proxyConfig,
-		cfg:         agentOpts,
-		secOpts:     sopts,
-		envoyOpts:   eopts,
-		fileWatcher: filewatcher.NewWatcher(),
+		proxyConfig:      proxyConfig,
+		cfg:              agentOpts,
+		secOpts:          sopts,
+		envoyOpts:        eopts,
+		fileWatcher:      filewatcher.NewWatcher(),
+		keepaliveOptions: keepaliveOptions,
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	"go.uber.org/atomic"
 	google_rpc "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -62,7 +63,7 @@ func (p *XdsProxy) DeltaAggregatedResources(downstream xds.DeltaDiscoveryStream)
 	defer p.unregisterStream(con)
 
 	// Handle downstream xds
-	initialRequestsSent := false
+	initialRequestsSent := atomic.NewBool(false)
 	go func() {
 		// Send initial request
 		p.connectedMutex.RLock()
@@ -81,7 +82,7 @@ func (p *XdsProxy) DeltaAggregatedResources(downstream xds.DeltaDiscoveryStream)
 			}
 			// forward to istiod
 			con.sendDeltaRequest(req)
-			if !initialRequestsSent && req.TypeUrl == v3.ListenerType {
+			if initialRequestsSent.CompareAndSwap(false, true) && req.TypeUrl == v3.ListenerType {
 				// fire off an initial NDS request
 				if _, f := p.handlers[v3.NameTableType]; f {
 					con.sendDeltaRequest(&discovery.DeltaDiscoveryRequest{
@@ -95,10 +96,11 @@ func (p *XdsProxy) DeltaAggregatedResources(downstream xds.DeltaDiscoveryStream)
 					})
 				}
 				// Fire of a configured initial request, if there is one
+				p.connectedMutex.RLock()
 				if initialRequest != nil {
 					con.sendDeltaRequest(initialRequest)
 				}
-				initialRequestsSent = true
+				p.connectedMutex.RUnlock()
 			}
 		}
 	}()
@@ -124,7 +126,8 @@ func (p *XdsProxy) DeltaAggregatedResources(downstream xds.DeltaDiscoveryStream)
 
 func (p *XdsProxy) handleDeltaUpstream(ctx context.Context, con *ProxyConnection, xds discovery.AggregatedDiscoveryServiceClient) error {
 	deltaUpstream, err := xds.DeltaAggregatedResources(ctx,
-		grpc.MaxCallRecvMsgSize(defaultClientMaxReceiveMessageSize))
+		grpc.MaxCallRecvMsgSize(defaultClientMaxReceiveMessageSize),
+	)
 	if err != nil {
 		// Envoy logs errors again, so no need to log beyond debug level
 		proxyLog.Debugf("failed to create delta upstream grpc client: %v", err)

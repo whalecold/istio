@@ -226,6 +226,7 @@ func (s *DiscoveryServer) processRequest(req *discovery.DiscoveryRequest, con *C
 	// It can happen when `processRequest` comes after push context has been updated(s.initPushContext),
 	// but proxy's SidecarScope has been updated(s.computeProxyState -> SetSidecarScope) due to optimizations that skip sidecar scope
 	// computation.
+	// TODO(wangjian.pg 2023.10.08), refer to: https://github.com/istio/istio/issues/34549#issuecomment-895947974
 	if con.proxy.SidecarScope != nil && con.proxy.SidecarScope.Version != request.Push.PushVersion {
 		s.computeProxyState(con.proxy, request)
 	}
@@ -454,6 +455,7 @@ func (s *DiscoveryServer) shouldRespond(con *Connection, request *discovery.Disc
 		added, removed, con.conID, request.VersionInfo, request.ResponseNonce)
 
 	return true, model.ResourceDelta{
+		TypeUrl:      request.TypeUrl,
 		Subscribed:   added,
 		Unsubscribed: removed,
 	}
@@ -477,7 +479,7 @@ func shouldUnsubscribe(request *discovery.DiscoveryRequest) bool {
 // resource names.
 func isWildcardTypeURL(typeURL string) bool {
 	switch typeURL {
-	case v3.SecretType, v3.EndpointType, v3.RouteType, v3.ExtensionConfigurationType:
+	case v3.SecretType, v3.EndpointType, v3.RouteType, v3.VirtualHostType, v3.ExtensionConfigurationType:
 		// By XDS spec, these are not wildcard
 		return false
 	case v3.ClusterType, v3.ListenerType:
@@ -495,6 +497,9 @@ func warmingDependencies(typeURL string) []string {
 	switch typeURL {
 	case v3.ClusterType:
 		return []string{v3.EndpointType}
+	case v3.RouteType:
+		// TODO(wangjian 2023.10.07), dive into this
+		return []string{v3.VirtualHostType}
 	default:
 		return nil
 	}
@@ -642,6 +647,16 @@ func (s *DiscoveryServer) initializeProxy(con *Connection) error {
 	if err := s.WorkloadEntryController.RegisterWorkload(proxy, con.connectedAt); err != nil {
 		return err
 	}
+
+	if proxy.Metadata.OnDemandXds {
+		if con.deltaStream != nil {
+			proxy.OnDemandEnable = true
+		} else {
+			log.Warnf("try to enable on-demand virtual host and cluster discovery on ADS and StoW protocol, "+
+				"fallback to use the StoW, %s, %s", proxy.ID, con.peerAddr)
+		}
+	}
+
 	s.computeProxyState(proxy, nil)
 	// Discover supported IP Versions of proxy so that appropriate config can be delivered.
 	proxy.DiscoverIPMode()
@@ -676,6 +691,10 @@ func (s *DiscoveryServer) computeProxyState(proxy *model.Proxy, request *model.P
 		gateway = true
 	} else {
 		push = request.Push
+		// TODO(wangjian.pg 2023.10.17)
+		// The `SidecarScope` and `Gateways` will be recomputed for each delta subscription request. And for proxies that
+		// enables on-demand, this recomputations appears to be redundant for every virtual host and cluster subscription/discovery
+		// request. We may need to distinguish cases more carefully to reduce unnecessary computation and latency.
 		if len(request.ConfigsUpdated) == 0 {
 			sidecar = true
 			gateway = true
@@ -769,15 +788,17 @@ func (s *DiscoveryServer) pushConnection(con *Connection, pushEv *Event) error {
 
 // PushOrder defines the order that updates will be pushed in. Any types not listed here will be pushed in random
 // order after the types listed here
-var PushOrder = []string{v3.ClusterType, v3.EndpointType, v3.ListenerType, v3.RouteType, v3.SecretType}
+// https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol#eventual-consistency-considerations
+var PushOrder = []string{v3.ClusterType, v3.EndpointType, v3.ListenerType, v3.RouteType, v3.VirtualHostType, v3.SecretType}
 
 // KnownOrderedTypeUrls has typeUrls for which we know the order of push.
 var KnownOrderedTypeUrls = map[string]struct{}{
-	v3.ClusterType:  {},
-	v3.EndpointType: {},
-	v3.ListenerType: {},
-	v3.RouteType:    {},
-	v3.SecretType:   {},
+	v3.ClusterType:     {},
+	v3.EndpointType:    {},
+	v3.ListenerType:    {},
+	v3.RouteType:       {},
+	v3.VirtualHostType: {},
+	v3.SecretType:      {},
 }
 
 func reportAllEvents(s DistributionStatusCache, id, version string, ignored sets.String) {
@@ -908,6 +929,7 @@ func (conn *Connection) send(res *discovery.DiscoveryResponse) error {
 		for _, rc := range res.Resources {
 			sz += len(rc.Value)
 		}
+		xdsPushBytesTotal.WithLabelValues(adsConnection, v3.GetMetricType(res.TypeUrl)).Add(float64(sz))
 		if res.Nonce != "" && !strings.HasPrefix(res.TypeUrl, v3.DebugType) {
 			conn.proxy.Lock()
 			if conn.proxy.WatchedResources[res.TypeUrl] == nil {

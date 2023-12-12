@@ -880,7 +880,7 @@ func TestHCMInternalAddressConfig(t *testing.T) {
 				authzCustomBuilder: &authz.Builder{},
 				authzBuilder:       &authz.Builder{},
 			}
-			httpConnManager := lb.buildHTTPConnectionManager(&httpListenerOpts{})
+			httpConnManager := lb.buildHTTPConnectionManager(&httpListenerOpts{}, false)
 			if !reflect.DeepEqual(tt.expectedconfig, httpConnManager.InternalAddressConfig) {
 				t.Errorf("unexpected internal address config, expected: %v, got :%v", tt.expectedconfig, httpConnManager.InternalAddressConfig)
 			}

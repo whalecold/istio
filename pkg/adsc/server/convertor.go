@@ -38,7 +38,7 @@ type configConvertor struct {
 func (cc configConvertor) Convert(conf *config.Config) (metav1.Object, error) {
 	switch conf.Spec.(type) {
 	case *networkingv1alpha3.ServiceEntry:
-		cc.annotateInstancesNum(conf)
+		conf = cc.annotateInstancesNum(conf)
 		return convertToK8sServiceEntry(conf)
 
 	case *networkingv1alpha3.WorkloadEntry:
@@ -53,21 +53,20 @@ func (cc configConvertor) Convert(conf *config.Config) (metav1.Object, error) {
 // FIXME(wangjian.pg 20230421), according to the comments and the implementation of the `store`
 // type(`cache.ThreadSafeStore`), we should not modify anything returned by `List/Get` method of
 // the store since it will break the indexing feature in addition to not being thread safe.
-func (cc configConvertor) annotateInstancesNum(conf *config.Config) {
+func (cc configConvertor) annotateInstancesNum(conf *config.Config) *config.Config {
 	if conf.GroupVersionKind != gvk.ServiceEntry {
-		return
+		return conf
 	}
 	num, err := cc.store.byWeLinkedToSeIndexerNumber(keyForRefIndexer(conf))
 	if err != nil || num == 0 {
-		return
+		return conf
 	}
-	// should deep copy the configs.
-	anno := conf.Annotations
-	conf.Annotations = make(map[string]string, len(anno)+1)
-	conf.Annotations[annotationInstanceNumber] = strconv.Itoa(num)
-	for key, val := range anno {
-		conf.Annotations[key] = val
+	clone := conf.DeepCopy()
+	if clone.Annotations == nil {
+		clone.Annotations = map[string]string{}
 	}
+	clone.Annotations[annotationInstanceNumber] = strconv.Itoa(num)
+	return &clone
 }
 
 func convertToK8sWorkloadEntry(res *config.Config) (metav1.Object, error) {

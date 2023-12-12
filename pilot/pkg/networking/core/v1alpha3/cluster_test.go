@@ -2800,3 +2800,117 @@ func TestBuildStaticClusterWithCredentialSocket(t *testing.T) {
 		"BlackHoleCluster", "InboundPassthroughClusterIpv4", "PassthroughCluster",
 	}))
 }
+
+func TestCopyServiceWithPortFilter(t *testing.T) {
+	testCases := []struct {
+		svc   *model.Service
+		ports map[int]bool
+		want  model.PortList
+	}{
+		{
+			svc: &model.Service{
+				Ports: model.PortList{
+					{
+						Name:     "http",
+						Port:     80,
+						Protocol: protocol.HTTP,
+					},
+					{
+						Name:     "https",
+						Port:     443,
+						Protocol: protocol.HTTP,
+					},
+					{
+						Name:     "http-server",
+						Port:     9080,
+						Protocol: protocol.HTTP,
+					},
+				},
+			},
+			ports: map[int]bool{
+				9080: true,
+				443:  true,
+			},
+			want: model.PortList{
+				{
+					Name:     "https",
+					Port:     443,
+					Protocol: protocol.HTTP,
+				},
+				{
+					Name:     "http-server",
+					Port:     9080,
+					Protocol: protocol.HTTP,
+				},
+			},
+		},
+		{
+			svc: &model.Service{
+				Ports: model.PortList{
+					{
+						Name:     "http",
+						Port:     80,
+						Protocol: protocol.HTTP,
+					},
+					{
+						Name:     "https",
+						Port:     443,
+						Protocol: protocol.HTTP,
+					},
+					{
+						Name:     "http-server",
+						Port:     9080,
+						Protocol: protocol.HTTP,
+					},
+				},
+			},
+			ports: map[int]bool{
+				9081: true,
+			},
+			want: nil,
+		},
+		{
+			svc: nil,
+			ports: map[int]bool{
+				80: true,
+			},
+			want: nil,
+		},
+		{
+			svc: &model.Service{
+				Ports: model.PortList{
+					{
+						Name:     "http",
+						Port:     80,
+						Protocol: protocol.HTTP,
+					},
+				},
+			},
+			ports: nil,
+			want:  nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		var old *model.Service
+		if tc.svc != nil {
+			old = tc.svc.DeepCopy()
+		}
+
+		got := copyServiceWithPortFilter(tc.svc, tc.ports)
+		if got == nil && tc.want == nil {
+			continue
+		}
+		if got == nil && tc.want != nil {
+			t.Fatalf("Expected returned copy of ports to be equal, but they are different")
+		}
+
+		if !reflect.DeepEqual(old.Ports, tc.svc.Ports) {
+			t.Fatalf("Expected mutable for the ports.")
+		}
+
+		if !reflect.DeepEqual(got.Ports, tc.want) {
+			t.Fatalf("Expected returned copy of ports to be equal, but they are different")
+		}
+	}
+}

@@ -48,6 +48,7 @@ import (
 	"istio.io/istio/pkg/envoy"
 	"istio.io/istio/pkg/file"
 	"istio.io/istio/pkg/istio-agent/grpcxds"
+	istiokeepalive "istio.io/istio/pkg/keepalive"
 	"istio.io/istio/pkg/security"
 	"istio.io/istio/pkg/spiffe"
 	"istio.io/istio/pkg/test"
@@ -702,7 +703,7 @@ func Setup(t *testing.T, opts ...func(a AgentTest) AgentTest) *AgentTest {
 		t.Cleanup(stsServer.Stop)
 	}
 
-	a := NewAgent(resp.ProxyConfig, &resp.AgentConfig, &resp.Security, envoy.ProxyConfig{TestOnly: !resp.envoyEnable})
+	a := NewAgent(resp.ProxyConfig, &resp.AgentConfig, &resp.Security, envoy.ProxyConfig{TestOnly: !resp.envoyEnable}, istiokeepalive.DefaultOption())
 	t.Cleanup(a.close)
 	ctx, done := context.WithCancel(context.Background())
 	wait, err := a.Run(ctx)

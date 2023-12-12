@@ -383,7 +383,7 @@ func (eds *EdsGenerator) Generate(proxy *model.Proxy, w *model.WatchedResource, 
 	if !edsNeedsPush(req.ConfigsUpdated) {
 		return nil, model.DefaultXdsLogDetails, nil
 	}
-	resources, logDetails := eds.buildEndpoints(proxy, req, w)
+	resources, logDetails, _ := eds.buildEndpoints(proxy, req, w)
 	return resources, logDetails, nil
 }
 
@@ -446,9 +446,12 @@ func (eds *EdsGenerator) GenerateDeltas(proxy *model.Proxy, req *model.PushReque
 	if !edsNeedsPush(req.ConfigsUpdated) {
 		return nil, nil, model.DefaultXdsLogDetails, false, nil
 	}
+
 	if !shouldUseDeltaEds(req) {
-		resources, logDetails := eds.buildEndpoints(proxy, req, w)
-		return resources, nil, logDetails, false, nil
+		// Partial endpoints push is actually delta push: only the changed/updated
+		// endpoints subset are pushed.
+		resources, logDetails, partialPush := eds.buildEndpoints(proxy, req, w)
+		return resources, nil, logDetails, partialPush, nil
 	}
 
 	resources, removed, logs := eds.buildDeltaEndpoints(proxy, req, w)
@@ -479,8 +482,9 @@ func onlyEndpointsChanged(req *model.PushRequest) bool {
 func (eds *EdsGenerator) buildEndpoints(proxy *model.Proxy,
 	req *model.PushRequest,
 	w *model.WatchedResource,
-) (model.Resources, model.XdsLogDetails) {
+) (model.Resources, model.XdsLogDetails, bool) {
 	var edsUpdatedServices map[string]struct{}
+	var partialPush bool
 	// canSendPartialFullPushes determines if we can send a partial push (ie a subset of known CLAs).
 	// This is safe when only Services has changed, as this implies that only the CLAs for the
 	// associated Service changed. Note when a multi-network Service changes it triggers a push with
@@ -489,6 +493,7 @@ func (eds *EdsGenerator) buildEndpoints(proxy *model.Proxy,
 	// see https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol#grouping-resources-into-responses
 	if !req.Full || (features.PartialFullPushes && onlyEndpointsChanged(req)) {
 		edsUpdatedServices = model.ConfigNamesOfKind(req.ConfigsUpdated, kind.ServiceEntry)
+		partialPush = true
 	}
 	var resources model.Resources
 	empty := 0
@@ -529,7 +534,7 @@ func (eds *EdsGenerator) buildEndpoints(proxy *model.Proxy,
 	return resources, model.XdsLogDetails{
 		Incremental:    len(edsUpdatedServices) != 0,
 		AdditionalInfo: fmt.Sprintf("empty:%v cached:%v/%v", empty, cached, cached+regenerated),
-	}
+	}, partialPush
 }
 
 // TODO(@hzxuzhonghu): merge with buildEndpoints

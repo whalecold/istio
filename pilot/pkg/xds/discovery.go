@@ -568,6 +568,7 @@ func (s *DiscoveryServer) InitGenerators(env *model.Environment, systemNameSpace
 	s.Generators[v3.ClusterType] = &CdsGenerator{Server: s}
 	s.Generators[v3.ListenerType] = &LdsGenerator{Server: s}
 	s.Generators[v3.RouteType] = &RdsGenerator{Server: s}
+	s.Generators[v3.VirtualHostType] = &VhdsGenerator{Server: s}
 	s.Generators[v3.EndpointType] = edsGen
 	s.Generators[v3.NameTableType] = &NdsGenerator{Server: s}
 	s.Generators[v3.ExtensionConfigurationType] = &EcdsGenerator{Server: s}

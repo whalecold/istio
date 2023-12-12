@@ -29,6 +29,80 @@ import (
 	"istio.io/pkg/log"
 )
 
+// VirtualHostDeletable returns true is the vhds be removed by the route configuration envoyfilter.
+func VirtualHostDeletable(
+	patchContext networking.EnvoyFilter_PatchContext,
+	proxy *model.Proxy,
+	efw *model.EnvoyFilterWrapper,
+	routeConfigurationName string,
+	virtualHost *route.VirtualHost,
+) bool {
+	defer runtime.HandleCrash(runtime.LogPanic, func(any) {
+		IncrementEnvoyFilterErrorMetric(VirtualHost)
+		log.Errorf("virtualHost patch caused panic, so the patches did not take effect")
+	})
+	// In case the patches cause panic, use the route generated before to reduce the influence.
+	if virtualHost == nil {
+		return false
+	}
+	if efw == nil {
+		return false
+	}
+	var portMap model.GatewayPortMap
+	if proxy.MergedGateway != nil {
+		portMap = proxy.MergedGateway.PortMap
+	}
+	for _, rp := range efw.Patches[networking.EnvoyFilter_VIRTUAL_HOST] {
+		if commonConditionMatch(patchContext, rp) &&
+			routeConfigurationNameMatch(patchContext, routeConfigurationName, rp, portMap) &&
+			virtualHostMatch(virtualHost, rp) {
+			if rp.Operation == networking.EnvoyFilter_Patch_REMOVE {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ApplyVirtualHostPatches only deal with the MERGE|REPLACE operator for EnvoyFilter_VIRTUAL_HOST. ADD operator
+// take effect in ApplyRouteConfigurationPatches and should deal with separately when operator is REMOVE.
+func ApplyVirtualHostPatches(
+	patchContext networking.EnvoyFilter_PatchContext,
+	proxy *model.Proxy,
+	efw *model.EnvoyFilterWrapper,
+	routeConfigurationName string,
+	vhds *route.VirtualHost,
+) (out *route.VirtualHost) {
+	defer runtime.HandleCrash(runtime.LogPanic, func(any) {
+		IncrementEnvoyFilterErrorMetric(VirtualHost)
+		log.Errorf("virtualHost patch caused panic, so the patches did not take effect")
+	})
+	// In case the patches cause panic, use the route generated before to reduce the influence.
+	if efw == nil {
+		return vhds
+	}
+	var portMap model.GatewayPortMap
+	if proxy.MergedGateway != nil {
+		portMap = proxy.MergedGateway.PortMap
+	}
+	for _, rp := range efw.Patches[networking.EnvoyFilter_VIRTUAL_HOST] {
+		applied := false
+		if commonConditionMatch(patchContext, rp) &&
+			routeConfigurationNameMatch(patchContext, routeConfigurationName, rp, portMap) &&
+			virtualHostMatch(vhds, rp) {
+			applied = true
+			if rp.Operation == networking.EnvoyFilter_Patch_MERGE {
+				merge.Merge(vhds, rp.Value)
+			} else if rp.Operation == networking.EnvoyFilter_Patch_REPLACE {
+				vhds = proto.Clone(rp.Value).(*route.VirtualHost)
+			}
+		}
+		IncrementEnvoyFilterMetric(rp.Key(), VirtualHost, applied)
+	}
+	patchHTTPRoutes(patchContext, efw.Patches, &route.RouteConfiguration{Name: routeConfigurationName}, vhds, portMap)
+	return vhds
+}
+
 func ApplyRouteConfigurationPatches(
 	patchContext networking.EnvoyFilter_PatchContext,
 	proxy *model.Proxy,
@@ -261,6 +335,12 @@ func patchHTTPRoute(patchContext networking.EnvoyFilter_PatchContext,
 		}
 		IncrementEnvoyFilterMetric(rp.Key(), Route, applied)
 	}
+}
+
+func routeConfigurationNameMatch(patchContext networking.EnvoyFilter_PatchContext, rcName string,
+	rp *model.EnvoyFilterConfigPatchWrapper, portMap model.GatewayPortMap,
+) bool {
+	return routeConfigurationMatch(patchContext, &route.RouteConfiguration{Name: rcName}, rp, portMap)
 }
 
 func routeConfigurationMatch(patchContext networking.EnvoyFilter_PatchContext, rc *route.RouteConfiguration,

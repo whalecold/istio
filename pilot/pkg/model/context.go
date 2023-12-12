@@ -257,6 +257,9 @@ type Proxy struct {
 	// where the proxy and service instances reside may have more than one IP address
 	IPAddresses []string
 
+	// OnDemandEnable ...
+	OnDemandEnable bool
+
 	// ID is the unique platform-specific sidecar proxy ID. For k8s it is the pod ID and
 	// namespace <podName.namespace>.
 	ID string
@@ -285,6 +288,11 @@ type Proxy struct {
 
 	// the sidecarScope associated with the proxy
 	SidecarScope *SidecarScope
+
+	// the OnDemandSidecarScope associated with the proxy and cut out by VHDS.
+	OnDemandSidecarScope *SidecarScope
+	// PrevOnDemandSidecarScope...
+	PrevOnDemandSidecarScope *SidecarScope
 
 	// the sidecarScope associated with the proxy previously
 	PrevSidecarScope *SidecarScope
@@ -653,6 +661,10 @@ type NodeMetadata struct {
 	// The istiod address when running ASM Managed Control Plane.
 	CloudrunAddr string `json:"CLOUDRUN_ADDR,omitempty"`
 
+	// OnDemandXds indicates whether the proxy wants to enable on-demand virtual hosts and cluster discovery.
+	// The on-demand loading can only be enabled with delta xDS protocol.
+	OnDemandXds bool `json:"ON_DEMAND_XDS,omitempty"`
+
 	// Contains a copy of the raw metadata. This is needed to lookup arbitrary values.
 	// If a value is known ahead of time it should be added to the struct rather than reading from here,
 	Raw map[string]any `json:"-"`
@@ -824,14 +836,19 @@ func (node *Proxy) ServiceNode() string {
 // as it needs the set of services for each listener port.
 func (node *Proxy) SetSidecarScope(ps *PushContext) {
 	sidecarScope := node.SidecarScope
+	onDemandSidecarScope := node.OnDemandSidecarScope
 
 	if node.Type == SidecarProxy {
 		node.SidecarScope = ps.getSidecarScope(node, node.Labels)
+		if node.OnDemandEnable {
+			node.trimSidecarScopeByOnDemandHosts(ps)
+		}
 	} else {
 		// Gateways should just have a default scope with egress: */*
 		node.SidecarScope = ps.getSidecarScope(node, nil)
 	}
 	node.PrevSidecarScope = sidecarScope
+	node.PrevOnDemandSidecarScope = onDemandSidecarScope
 }
 
 // SetGatewaysForProxy merges the Gateway objects associated with this

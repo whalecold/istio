@@ -23,6 +23,7 @@ import (
 	fault "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/fault/v3"
 	grpcstats "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/grpc_stats/v3"
 	grpcweb "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/grpc_web/v3"
+	ondemand "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/on_demand/v3"
 	router "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/router/v3"
 	httpwasm "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/wasm/v3"
 	httpinspector "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/listener/http_inspector/v3"
@@ -50,6 +51,9 @@ const (
 	RawBufferTransportProtocol = "raw_buffer"
 
 	MxFilterName = "istio.metadata_exchange"
+
+	// HTTPOnDemand HTTP on_demand filter
+	HTTPOnDemand = "envoy.filters.http.on_demand"
 )
 
 // Define static filters to be reused across the codebase. This avoids duplicate marshaling/unmarshaling
@@ -193,6 +197,33 @@ var (
 	MetadataToPeerNode = &listener.ListenerFilter{
 		Name:       "envoy.filters.listener.metadata_to_peer_node",
 		ConfigType: &listener.ListenerFilter_TypedConfig{TypedConfig: protoconv.TypedStruct("type.googleapis.com/istio.telemetry.metadatatopeernode.v1.Config")},
+	}
+
+	PerRouteOdcds = protoconv.MessageToAny(&ondemand.PerRouteConfig{
+		Odcds: &ondemand.OnDemandCds{
+			Source: &core.ConfigSource{
+				ConfigSourceSpecifier: &core.ConfigSource_Ads{
+					Ads: &core.AggregatedConfigSource{},
+				},
+			},
+		},
+	})
+
+	AdsOdcds = protoconv.MessageToAny(&ondemand.OnDemand{
+		Odcds: &ondemand.OnDemandCds{
+			Source: &core.ConfigSource{
+				ConfigSourceSpecifier: &core.ConfigSource_Ads{
+					Ads: &core.AggregatedConfigSource{},
+				},
+			},
+		},
+	})
+
+	OnDemand = &hcm.HttpFilter{
+		Name: HTTPOnDemand,
+		ConfigType: &hcm.HttpFilter_TypedConfig{
+			TypedConfig: AdsOdcds,
+		},
 	}
 )
 

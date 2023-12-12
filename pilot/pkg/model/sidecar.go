@@ -33,6 +33,7 @@ import (
 const (
 	wildcardNamespace = "*"
 	currentNamespace  = "."
+	denyAll           = "~/*"
 	wildcardService   = host.Name("*")
 )
 
@@ -76,6 +77,8 @@ type SidecarScope struct {
 	// The crd itself. Can be nil if we are constructing the default
 	// sidecar scope
 	Sidecar *networking.Sidecar
+	// This is the namespace where sidecarConfig resides.
+	SidecarNamespace string
 
 	// Version this sidecar was computed for
 	Version string
@@ -163,8 +166,6 @@ type IstioEgressListenerWrapper struct {
 	// a private virtual service for serviceA from the local namespace,
 	// with a different path rewrite or no path rewrites.
 	virtualServices []config.Config
-
-	listenerHosts map[string][]host.Name
 }
 
 const defaultSidecar = "default-sidecar"
@@ -263,6 +264,7 @@ func ConvertToSidecarScope(ps *PushContext, sidecarConfig *config.Config, config
 	sidecar := sidecarConfig.Spec.(*networking.Sidecar)
 	out := &SidecarScope{
 		Name:               sidecarConfig.Name,
+		SidecarNamespace:   sidecarConfig.Namespace,
 		Namespace:          configNamespace,
 		Sidecar:            sidecar,
 		configDependencies: make(map[ConfigHash]struct{}),
@@ -447,7 +449,7 @@ func convertIstioListenerToWrapper(ps *PushContext, configNamespace string,
 		IstioListener: istioListener,
 	}
 
-	out.listenerHosts = make(map[string][]host.Name)
+	listenerHosts := make(map[string][]host.Name) // map namespace to hostnames
 	for _, h := range istioListener.Hosts {
 		parts := strings.SplitN(h, "/", 2)
 		if len(parts) < 2 {
@@ -457,15 +459,12 @@ func convertIstioListenerToWrapper(ps *PushContext, configNamespace string,
 		if parts[0] == currentNamespace {
 			parts[0] = configNamespace
 		}
-		if _, exists := out.listenerHosts[parts[0]]; !exists {
-			out.listenerHosts[parts[0]] = make([]host.Name, 0)
-		}
-		out.listenerHosts[parts[0]] = append(out.listenerHosts[parts[0]], host.Name(parts[1]))
+		listenerHosts[parts[0]] = append(listenerHosts[parts[0]], host.Name(parts[1]))
 	}
 
-	out.virtualServices = SelectVirtualServices(ps.virtualServiceIndex, configNamespace, out.listenerHosts)
+	out.virtualServices = SelectVirtualServices(ps.virtualServiceIndex, configNamespace, listenerHosts)
 	svces := ps.servicesExportedToNamespace(configNamespace)
-	out.services = out.selectServices(svces, configNamespace, out.listenerHosts)
+	out.services = out.selectServices(svces, configNamespace, listenerHosts)
 
 	return out
 }

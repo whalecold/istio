@@ -151,7 +151,7 @@ func newProxyCommand() *cobra.Command {
 				OutlierLogPath:    proxyArgs.OutlierLogPath,
 			}
 			agentOptions := options.NewAgentOptions(proxy, proxyConfig)
-			agent := istio_agent.NewAgent(proxyConfig, agentOptions, secOpts, envoyOptions)
+			agent := istio_agent.NewAgent(proxyConfig, agentOptions, secOpts, envoyOptions, proxyArgs.KeepaliveOptions)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -204,6 +204,8 @@ func addFlags(proxyCmd *cobra.Command) {
 		"Go template bootstrap config")
 	proxyCmd.PersistentFlags().StringVar(&proxyArgs.OutlierLogPath, "outlierLogPath", "",
 		"The log path for outlier detection")
+
+	proxyArgs.KeepaliveOptions.AttachCobraFlags(proxyCmd)
 }
 
 func initStatusServer(ctx context.Context, proxy *model.Proxy, proxyConfig *meshconfig.ProxyConfig,

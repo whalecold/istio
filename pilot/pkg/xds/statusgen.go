@@ -112,6 +112,7 @@ func (sg *StatusGen) debugSyncz() model.Resources {
 	stypes := []string{
 		v3.ListenerType,
 		v3.RouteType,
+		v3.VirtualHostType,
 		v3.EndpointType,
 		v3.ClusterType,
 		v3.ExtensionConfigurationType,

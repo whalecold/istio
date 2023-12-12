@@ -48,6 +48,7 @@ import (
 	"istio.io/istio/pkg/config/mesh"
 	"istio.io/istio/pkg/config/schema/gvk"
 	"istio.io/istio/pkg/envoy"
+	istiokeepalive "istio.io/istio/pkg/keepalive"
 	"istio.io/istio/pkg/security"
 	"istio.io/istio/pkg/test"
 	"istio.io/istio/pkg/test/env"
@@ -270,7 +271,7 @@ func setupXdsProxyWithDownstreamOptions(t *testing.T, opts []grpc.ServerOption) 
 	ia := NewAgent(proxyConfig, &AgentOptions{
 		XdsUdsPath:            filepath.Join(dir, "XDS"),
 		DownstreamGrpcOptions: opts,
-	}, secOpts, envoy.ProxyConfig{TestOnly: true})
+	}, secOpts, envoy.ProxyConfig{TestOnly: true}, istiokeepalive.DefaultOption())
 	t.Cleanup(func() {
 		ia.close()
 	})

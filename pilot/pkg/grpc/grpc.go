@@ -50,8 +50,7 @@ func Send(ctx context.Context, send SendHandler) error {
 			return err
 		}
 	}
-	err := send()
-	return err
+	return send()
 }
 
 func ServerOptions(options *istiokeepalive.Options, interceptors ...grpc.UnaryServerInterceptor) []grpc.ServerOption {

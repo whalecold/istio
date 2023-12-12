@@ -289,7 +289,10 @@ func blackholeFilterChain(push *model.PushContext, node *model.Proxy) *listener.
 	}
 }
 
-func (lb *ListenerBuilder) buildHTTPConnectionManager(httpOpts *httpListenerOpts) *hcm.HttpConnectionManager {
+func (lb *ListenerBuilder) buildHTTPConnectionManager(
+	httpOpts *httpListenerOpts,
+	enableOnDemandFilter bool,
+) *hcm.HttpConnectionManager {
 	if httpOpts.connectionManager == nil {
 		httpOpts.connectionManager = &hcm.HttpConnectionManager{}
 	}
@@ -403,6 +406,11 @@ func (lb *ListenerBuilder) buildHTTPConnectionManager(httpOpts *httpListenerOpts
 	// TypedPerFilterConfig in route needs these filters.
 	filters = append(filters, xdsfilters.Fault, xdsfilters.Cors)
 	filters = append(filters, lb.push.Telemetry.HTTPFilters(lb.node, httpOpts.class)...)
+
+	if enableOnDemandFilter {
+		filters = append(filters, xdsfilters.OnDemand)
+	}
+
 	filters = append(filters, xdsfilters.BuildRouterFilter(routerFilterCtx))
 
 	connectionManager.HttpFilters = filters
