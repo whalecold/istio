@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -46,6 +47,15 @@ const (
 	wildcardDomainPrefix     = "*."
 	inboundVirtualHostPrefix = string(model.TrafficDirectionInbound) + "|http|"
 )
+
+var adsVHDSConfigSource = &route.Vhds{
+	ConfigSource: &v3.ConfigSource{
+		ConfigSourceSpecifier: &v3.ConfigSource_Ads{
+			Ads: &v3.AggregatedConfigSource{},
+		},
+		ResourceApiVersion: v3.ApiVersion_V3,
+	},
+}
 
 // BuildHTTPRoutes produces a list of routes for the proxy
 func (configgen *ConfigGeneratorImpl) BuildHTTPRoutes(
@@ -147,6 +157,7 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 		if index != -1 {
 			useSniffing = true
 		}
+		// the routeName is hostname:port while useSniffing enabled.
 		listenerPort, err = strconv.Atoi(routeName[index+1:])
 	} else {
 		listenerPort, err = strconv.Atoi(routeName)
@@ -167,7 +178,28 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 	var routeCache *istio_route.Cache
 	var resource *discovery.Resource
 
+	out := &route.RouteConfiguration{
+		Name:             routeName,
+		ValidateClusters: proto.BoolFalse,
+	}
+
+	if SidecarIgnorePort(node) {
+		out.IgnorePortInHostMatching = true
+	}
+
+	if node.OnDemandEnable {
+		out.Vhds = adsVHDSConfigSource
+		// apply envoy filter patches
+		out = envoyfilter.ApplyRouteConfigurationPatches(networking.EnvoyFilter_SIDECAR_OUTBOUND, node, efw, out)
+		resource = &discovery.Resource{
+			Name:     out.Name,
+			Resource: protoconv.MessageToAny(out),
+		}
+		return resource, false
+	}
+
 	cacheHit := false
+
 	if useSniffing && listenerPort != 0 {
 		// Check if we have already computed the list of all virtual hosts for this port
 		// If so, then  we simply have to return only the relevant virtual hosts for
@@ -201,14 +233,7 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundHTTPRouteConfig(
 		virtualHosts = append(virtualHosts, buildCatchAllVirtualHost(node))
 	}
 
-	out := &route.RouteConfiguration{
-		Name:             routeName,
-		VirtualHosts:     virtualHosts,
-		ValidateClusters: proto.BoolFalse,
-	}
-	if SidecarIgnorePort(node) {
-		out.IgnorePortInHostMatching = true
-	}
+	out.VirtualHosts = virtualHosts
 
 	// apply envoy filter patches
 	out = envoyfilter.ApplyRouteConfigurationPatches(networking.EnvoyFilter_SIDECAR_OUTBOUND, node, efw, out)
@@ -295,25 +320,35 @@ func BuildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext
 	efKeys []string,
 	xdsCache model.XdsCache,
 ) ([]*route.VirtualHost, *discovery.Resource, *istio_route.Cache) {
-	var virtualServices []config.Config
-	var services []*model.Service
-
+	sidecarScope := node.SidecarScope
+	if node.OnDemandEnable {
+		sidecarScope = node.OnDemandSidecarScope
+	}
 	// Get the services from the egress listener.  When sniffing is enabled, we send
 	// route name as foo.bar.com:8080 which is going to match against the wildcard
 	// egress listener only. A route with sniffing would not have been generated if there
 	// was a sidecar with explicit port (and hence protocol declaration). A route with
 	// sniffing is generated only in the case of the catch all egress listener.
-	egressListener := node.SidecarScope.GetEgressListenerForRDS(listenerPort, routeName)
+	egressListener := sidecarScope.GetEgressListenerForRDS(listenerPort, routeName)
 	// We should never be getting a nil egress listener because the code that setup this RDS
 	// call obviously saw an egress listener
 	if egressListener == nil {
 		return nil, nil, nil
 	}
+	return buildSidecarOutboundVirtualHosts(node, push, routeName, listenerPort, efKeys, egressListener, xdsCache)
+}
 
-	services = egressListener.Services()
+func buildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext,
+	routeName string,
+	listenerPort int,
+	efKeys []string,
+	egressListener *model.IstioEgressListenerWrapper,
+	xdsCache model.XdsCache,
+) ([]*route.VirtualHost, *discovery.Resource, *istio_route.Cache) {
+	services := egressListener.Services()
 	// To maintain correctness, we should only use the virtualservices for
 	// this listener and not all virtual services accessible to this proxy.
-	virtualServices = egressListener.VirtualServices()
+	virtualServices := egressListener.VirtualServices()
 
 	// When generating RDS for ports created via the SidecarScope, we treat ports as HTTP proxy style ports
 	// if ports protocol is HTTP_PROXY.
@@ -374,6 +409,7 @@ func BuildSidecarOutboundVirtualHosts(node *model.Proxy, push *model.PushContext
 	}
 
 	// This is hack to keep consistent with previous behavior.
+	// TODO why not perform the select function when port is equal with 80.
 	if listenerPort != 80 {
 		// only select virtualServices that matches a service
 		virtualServices = selectVirtualServices(virtualServices, servicesByName)

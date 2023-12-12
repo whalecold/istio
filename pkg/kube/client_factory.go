@@ -35,6 +35,7 @@ import (
 	"k8s.io/kubectl/pkg/util/openapi"
 	"k8s.io/kubectl/pkg/validation"
 
+	"istio.io/istio/pilot/pkg/features"
 	"istio.io/istio/pkg/lazy"
 )
 
@@ -106,6 +107,8 @@ func (c *clientFactory) ToRESTConfig() (*rest.Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	restConfig.QPS = float32(features.RequestLimit)
+	restConfig.Burst = int(features.RequestLimit) * 2
 	return SetRestDefaults(restConfig), nil
 }
 

@@ -20,14 +20,15 @@ import v3 "istio.io/istio/pilot/pkg/xds/v3"
 type EventType = string
 
 var AllEventTypes = map[EventType]struct{}{
-	v3.ClusterType:  {},
-	v3.ListenerType: {},
-	v3.RouteType:    {},
-	v3.EndpointType: {},
+	v3.ClusterType:     {},
+	v3.ListenerType:    {},
+	v3.RouteType:       {},
+	v3.VirtualHostType: {},
+	v3.EndpointType:    {},
 }
 
 // AllEventTypesList is AllEventTypes in list form, for convenience
-var AllEventTypesList = []EventType{v3.ClusterType, v3.ListenerType, v3.RouteType, v3.EndpointType}
+var AllEventTypesList = []EventType{v3.ClusterType, v3.ListenerType, v3.RouteType, v3.VirtualHostType, v3.EndpointType}
 
 // EventHandler allows for generic monitoring of xDS ACKS and disconnects, for the purpose of tracking
 // Config distribution through the mesh.

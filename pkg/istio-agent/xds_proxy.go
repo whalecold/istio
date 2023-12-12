@@ -121,6 +121,7 @@ type XdsProxy struct {
 	ecdsLastNonce         atomic.String
 	downstreamGrpcOptions []grpc.ServerOption
 	istiodSAN             string
+	keepaliveOptions      *istiokeepalive.Options
 }
 
 var proxyLog = log.RegisterScope("xdsproxy", "XDS Proxy in Istio Agent", 0)
@@ -158,6 +159,7 @@ func initXdsProxy(ia *Agent) (*XdsProxy, error) {
 		proxyAddresses:        ia.cfg.ProxyIPAddresses,
 		ia:                    ia,
 		downstreamGrpcOptions: ia.cfg.DownstreamGrpcOptions,
+		keepaliveOptions:      ia.keepaliveOptions,
 	}
 
 	if ia.localDNSServer != nil {
@@ -463,7 +465,6 @@ func (p *XdsProxy) handleUpstreamRequest(con *ProxyConnection) {
 						TypeUrl: v3.ProxyConfigType,
 					})
 				}
-				// set flag before sending the initial request to prevent race.
 				initialRequestsSent.Store(true)
 				// Fire of a configured initial request, if there is one
 				p.connectedMutex.RLock()
@@ -640,9 +641,8 @@ func (p *XdsProxy) initDownstreamServer() error {
 	if err != nil {
 		return err
 	}
-	// TODO: Expose keepalive options to agent cmd line flags.
 	opts := p.downstreamGrpcOptions
-	opts = append(opts, istiogrpc.ServerOptions(istiokeepalive.DefaultOption())...)
+	opts = append(opts, istiogrpc.ServerOptions(p.keepaliveOptions)...)
 	grpcs := grpc.NewServer(opts...)
 	discovery.RegisterAggregatedDiscoveryServiceServer(grpcs, p)
 	reflection.Register(grpcs)
@@ -670,8 +670,8 @@ func (p *XdsProxy) buildUpstreamClientDialOpts(sa *Agent) ([]grpc.DialOption, er
 	}
 
 	keepaliveOption := grpc.WithKeepaliveParams(keepalive.ClientParameters{
-		Time:    30 * time.Second,
-		Timeout: 10 * time.Second,
+		Time:    p.keepaliveOptions.Time,
+		Timeout: p.keepaliveOptions.Timeout,
 	})
 
 	initialWindowSizeOption := grpc.WithInitialWindowSize(int32(defaultInitialWindowSize))

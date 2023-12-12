@@ -16,7 +16,6 @@ package xds
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -233,8 +232,8 @@ func (s *DiscoveryServer) receiveDelta(con *Connection, identities []string) {
 }
 
 func (conn *Connection) sendDelta(res *discovery.DeltaDiscoveryResponse) error {
+	start := time.Now()
 	sendHandler := func() error {
-		start := time.Now()
 		defer func() { recordSendTime(time.Since(start)) }()
 		return conn.deltaStream.Send(res)
 	}
@@ -244,6 +243,7 @@ func (conn *Connection) sendDelta(res *discovery.DeltaDiscoveryResponse) error {
 		for _, rc := range res.Resources {
 			sz += len(rc.Resource.Value)
 		}
+		xdsPushBytesTotal.WithLabelValues(deltaConnection, v3.GetMetricType(res.TypeUrl)).Add(float64(sz))
 		if res.Nonce != "" && !strings.HasPrefix(res.TypeUrl, v3.DebugType) {
 			conn.proxy.Lock()
 			if conn.proxy.WatchedResources[res.TypeUrl] == nil {
@@ -256,7 +256,8 @@ func (conn *Connection) sendDelta(res *discovery.DeltaDiscoveryResponse) error {
 			conn.proxy.Unlock()
 		}
 	} else {
-		deltaLog.Infof("Timeout writing %s", conn.conID)
+		deltaLog.Infof("Timeout writing %s, type %v size %v time %v err %v code %v", conn.conID,
+			v3.GetShortType(res.TypeUrl), util.ByteCount(ResourceSize(res.Resources)), time.Since(start), err, status.Convert(err))
 		xdsResponseWriteTimeouts.Increment()
 	}
 	return err
@@ -278,7 +279,21 @@ func (s *DiscoveryServer) processDeltaRequest(req *discovery.DeltaDiscoveryReque
 	if s.StatusReporter != nil {
 		s.StatusReporter.RegisterEvent(con.conID, req.TypeUrl, req.ResponseNonce)
 	}
-	shouldRespond := s.shouldRespondDelta(con, req)
+
+	// A synthetic wildcard will be received when on-demand loading is enabled and cluster discovery is subscribed
+	// through the  ADS grpc stream. Drop it in case of disrupting the behavior of on-demand loading.
+	// TODO(wangjian.pg 2023.11.06) remove the hardcoded workaround when we find a way to fix the envoy behavior.
+	if con.proxy.OnDemandEnable {
+		for i, resourceName := range req.ResourceNamesSubscribe {
+			if resourceName == "*" {
+				req.ResourceNamesSubscribe = append(req.ResourceNamesSubscribe[:i],
+					req.ResourceNamesSubscribe[i+1:]...)
+				break
+			}
+		}
+	}
+
+	shouldRespond, delta := s.shouldRespondDelta(con, req)
 	if !shouldRespond {
 		return nil
 	}
@@ -292,15 +307,15 @@ func (s *DiscoveryServer) processDeltaRequest(req *discovery.DeltaDiscoveryReque
 		// is used by the XDS cache to determine if a entry is stale. If we use Now() with an old push context,
 		// we may end up overriding active cache entries with stale ones.
 		Start: con.proxy.LastPushTime,
-		Delta: model.ResourceDelta{
-			Subscribed:   sets.New(req.ResourceNamesSubscribe...),
-			Unsubscribed: sets.New(req.ResourceNamesUnsubscribe...),
-		},
+		Delta: delta,
 	}
 	// SidecarScope for the proxy may has not been updated based on this pushContext.
 	// It can happen when `processRequest` comes after push context has been updated(s.initPushContext),
 	// but before proxy's SidecarScope has been updated(s.updateProxy).
-	if con.proxy.SidecarScope != nil && con.proxy.SidecarScope.Version != request.Push.PushVersion {
+	if con.proxy.SidecarScope != nil && con.proxy.SidecarScope.Version != request.Push.PushVersion ||
+		// Trigger recompute proxy state when VHDS subscription changes so that the sidecarScope of proxy
+		// can be re-trimmed based on the updated VHDS subscription list.
+		request.Delta.TypeUrl == v3.VirtualHostType && !request.Delta.IsEmpty() {
 		s.computeProxyState(con.proxy, request)
 	}
 	return s.pushDeltaXds(con, con.Watched(req.TypeUrl), request)
@@ -308,7 +323,8 @@ func (s *DiscoveryServer) processDeltaRequest(req *discovery.DeltaDiscoveryReque
 
 // shouldRespondDelta determines whether this request needs to be responded back. It applies the ack/nack rules as per xds protocol
 // using WatchedResource for previous state and discovery request for the current state.
-func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryRequest) bool {
+// TODO(wangjian.pg 2023.10.03) merge with method `DiscoveryServer.shouldRespond"
+func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryRequest) (bool, model.ResourceDelta) {
 	stype := v3.GetShortType(request.TypeUrl)
 
 	// If there is an error in request that means previous response is erroneous.
@@ -321,7 +337,7 @@ func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery
 		if s.StatusGen != nil {
 			s.StatusGen.OnNack(con.proxy, deltaToSotwRequest(request))
 		}
-		return false
+		return false, emptyResourceDelta
 	}
 
 	con.proxy.RLock()
@@ -336,9 +352,10 @@ func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery
 	// We should always respond with the current resource names.
 	if previousInfo == nil {
 		if len(request.InitialResourceVersions) > 0 {
-			deltaLog.Debugf("ADS:%s: RECONNECT %s %s", stype, con.conID, request.ResponseNonce)
+			deltaLog.Debugf("ADS:%s: RECONNECT %s %s subscribe %v unsubscribe %v", stype, con.conID,
+				request.ResponseNonce, request.ResourceNamesSubscribe, request.ResourceNamesUnsubscribe)
 		} else {
-			deltaLog.Debugf("ADS:%s: INIT %s %s", stype, con.conID, request.ResponseNonce)
+			deltaLog.Debugf("ADS:%s: INIT %s %s %v", stype, con.conID, request.ResponseNonce, request.ResourceNamesSubscribe)
 		}
 		con.proxy.Lock()
 		con.proxy.WatchedResources[request.TypeUrl] = &model.WatchedResource{
@@ -361,17 +378,25 @@ func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery
 			}
 		}
 		con.proxy.Unlock()
-		return true
+		return true, model.ResourceDelta{
+			TypeUrl:      request.TypeUrl,
+			Subscribed:   sets.New(request.ResourceNamesSubscribe...),
+			Unsubscribed: sets.New(request.ResourceNamesUnsubscribe...),
+		}
 	}
 
 	// If there is mismatch in the nonce, that is a case of expired/stale nonce.
 	// A nonce becomes stale following a newer nonce being sent to Envoy.
 	// TODO: due to concurrent unsubscribe, this probably doesn't make sense. Do we need any logic here?
+
+	// FIXME(wangjian.pg 2023.10.07), refer to: https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol#incremental-xds :
+	// Note that while a response_nonce may be set on the request, the server must honor changes to the subscription state even if the nonce is stale.
+	// The nonce may be used to correlate an ack/nack with a server response, but should not be used to reject stale requests.
 	if request.ResponseNonce != "" && request.ResponseNonce != previousInfo.NonceSent {
 		deltaLog.Debugf("ADS:%s: REQ %s Expired nonce received %s, sent %s", stype,
 			con.conID, request.ResponseNonce, previousInfo.NonceSent)
 		xdsExpiredNonce.With(typeTag.Value(v3.GetMetricType(request.TypeUrl))).Increment()
-		return false
+		return false, emptyResourceDelta
 	}
 
 	// If it comes here, that means nonce match. This an ACK. We should record
@@ -385,35 +410,34 @@ func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery
 	previousInfo.AlwaysRespond = false
 	con.proxy.Unlock()
 
-	oldAck := listEqualUnordered(previousResources, deltaResources)
-	// Spontaneous DeltaDiscoveryRequests from the client.
-	// This can be done to dynamically add or remove elements from the tracked resource_names set.
-	// In this case response_nonce is empty.
-	newAck := request.ResponseNonce != ""
-	if newAck != oldAck {
-		// Not sure which is better, lets just log if they don't match for now and compare.
-		deltaLog.Errorf("ADS:%s: New ACK and old ACK check mismatch: %v vs %v", stype, newAck, oldAck)
-		if features.EnableUnsafeAssertions {
-			panic(fmt.Sprintf("ADS:%s: New ACK and old ACK check mismatch: %v vs %v", stype, newAck, oldAck))
-		}
-	}
+	prev := sets.New(previousResources...)
+	cur := sets.New(deltaResources...)
+	removed := prev.Difference(cur)
+	added := cur.Difference(prev)
+
 	// Envoy can send two DiscoveryRequests with same version and nonce
 	// when it detects a new resource. We should respond if they change.
-	if oldAck {
+	if len(removed)+len(added) == 0 {
 		// We should always respond "alwaysRespond" marked requests to let Envoy finish warming
 		// even though Nonce match and it looks like an ACK.
 		if alwaysRespond {
 			log.Infof("ADS:%s: FORCE RESPONSE %s for warming.", stype, con.conID)
-			return true
+			return true, emptyResourceDelta
 		}
 
-		deltaLog.Debugf("ADS:%s: ACK  %s %s", stype, con.conID, request.ResponseNonce)
-		return false
+		deltaLog.Debugf("ADS:%s: ACK  %s %s previous resources %v deltaResources %v", stype, con.conID,
+			request.ResponseNonce, previousResources, deltaResources)
+		return false, emptyResourceDelta
 	}
+
 	deltaLog.Debugf("ADS:%s: RESOURCE CHANGE previous resources: %v, new resources: %v %s %s", stype,
 		previousResources, deltaResources, con.conID, request.ResponseNonce)
 
-	return true
+	return true, model.ResourceDelta{
+		TypeUrl:      request.TypeUrl,
+		Subscribed:   added,
+		Unsubscribed: removed,
+	}
 }
 
 // Push an Delta XDS resource for the given connection. Configuration will be generated
@@ -433,9 +457,10 @@ func (s *DiscoveryServer) pushDeltaXds(con *Connection,
 	originalW := w
 	// If delta is set, client is requesting new resources or removing old ones. We should just generate the
 	// new resources it needs, rather than the entire set of known resources.
-	// Note: we do not need to account for unsubscribed resources as these are handled by parent removal;
+	// NOTE: we do not need to account for unsubscribed resources as these are handled by parent removal;
 	// See https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol#deleting-resources.
 	// This means if there are only removals, we will not respond.
+	// TODO(wangjian.pg 20230927) Check if this behavior causes a memory leak of envoy.
 	var logFiltered string
 	if !req.Delta.IsEmpty() {
 		logFiltered = " filtered:" + strconv.Itoa(len(w.ResourceNames)-len(req.Delta.Subscribed))
@@ -458,9 +483,11 @@ func (s *DiscoveryServer) pushDeltaXds(con *Connection,
 			s.compareDiff(con, originalW, fullRes, res, deletedRes, usedDelta, req.Delta, l.Incremental)
 		}
 	case model.XdsResourceGenerator:
+		// TODO(wangjian.pg 20230927) Check if stow generation causes envoy memory leak,
+		// eg. already deleted clusters resides in memory forever.
 		res, logdata, err = g.Generate(con.proxy, w, req)
 	}
-	if err != nil || (res == nil && deletedRes == nil) {
+	if err != nil || (res == nil && deletedRes == nil && v3.GetShortType(w.TypeUrl) != "VHDS") {
 		// If we have nothing to send, report that we got an ACK for this version.
 		if s.StatusReporter != nil {
 			s.StatusReporter.RegisterEvent(con.conID, w.TypeUrl, req.Push.LedgerVersion)
@@ -487,13 +514,6 @@ func (s *DiscoveryServer) pushDeltaXds(con *Connection,
 	}
 	if len(resp.RemovedResources) > 0 {
 		deltaLog.Debugf("ADS:%v REMOVE for node:%s %v", v3.GetShortType(w.TypeUrl), con.conID, resp.RemovedResources)
-	}
-	// normally wildcard xds `subscribe` is always nil, just in case there are some extended type not handled correctly.
-	if req.Delta.Subscribed == nil && isWildcardTypeURL(w.TypeUrl) {
-		// this is probably a bad idea...
-		con.proxy.Lock()
-		w.ResourceNames = currentResources
-		con.proxy.Unlock()
 	}
 
 	configSize := ResourceSize(res)

@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -30,6 +31,9 @@ var (
 	nodeTag    = monitoring.MustCreateLabel("node")
 	typeTag    = monitoring.MustCreateLabel("type")
 	versionTag = monitoring.MustCreateLabel("version")
+
+	adsConnection   = "ads"
+	deltaConnection = "delta"
 
 	// pilot_total_xds_rejects should be used instead. This is for backwards compatibility
 	cdsReject = monitoring.NewGauge(
@@ -56,6 +60,13 @@ var (
 	rdsReject = monitoring.NewGauge(
 		"pilot_xds_rds_reject",
 		"Pilot rejected RDS.",
+		monitoring.WithLabels(nodeTag, errTag),
+	)
+
+	// pilot_total_xds_rejects should be used instead. This is for backwards compatibility
+	vhdsReject = monitoring.NewGauge(
+		"pilot_xds_vhds_reject",
+		"Pilot rejected VHDS.",
 		monitoring.WithLabels(nodeTag, errTag),
 	)
 
@@ -91,6 +102,13 @@ var (
 		"Pilot XDS response write timeouts.",
 	)
 
+	xdsPushBytesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "pilot_xds_push_bytes_total",
+			Help: "Pilot XDS response write size.",
+		},
+		[]string{"xds", "kind"},
+	)
 	// Covers xds_builderr and xds_senderr for xds in {lds, rds, cds, eds}.
 	pushes = monitoring.NewSum(
 		"pilot_xds_pushes",
@@ -98,10 +116,11 @@ var (
 		monitoring.WithLabels(typeTag),
 	)
 
-	cdsSendErrPushes = pushes.With(typeTag.Value("cds_senderr"))
-	edsSendErrPushes = pushes.With(typeTag.Value("eds_senderr"))
-	ldsSendErrPushes = pushes.With(typeTag.Value("lds_senderr"))
-	rdsSendErrPushes = pushes.With(typeTag.Value("rds_senderr"))
+	cdsSendErrPushes  = pushes.With(typeTag.Value("cds_senderr"))
+	edsSendErrPushes  = pushes.With(typeTag.Value("eds_senderr"))
+	ldsSendErrPushes  = pushes.With(typeTag.Value("lds_senderr"))
+	rdsSendErrPushes  = pushes.With(typeTag.Value("rds_senderr"))
+	vhdsSendErrPushes = pushes.With(typeTag.Value("vhds_senderr"))
 
 	debounceTime = monitoring.NewDistribution(
 		"pilot_debounce_time",
@@ -240,6 +259,8 @@ func recordSendError(xdsType string, err error) bool {
 			edsSendErrPushes.Increment()
 		case v3.RouteType:
 			rdsSendErrPushes.Increment()
+		case v3.VirtualHostType:
+			vhdsSendErrPushes.Increment()
 		}
 		return true
 	}
@@ -257,6 +278,8 @@ func incrementXDSRejects(xdsType string, node, errCode string) {
 		edsReject.With(nodeTag.Value(node), errTag.Value(errCode)).Increment()
 	case v3.RouteType:
 		rdsReject.With(nodeTag.Value(node), errTag.Value(errCode)).Increment()
+	case v3.VirtualHostType:
+		vhdsReject.With(nodeTag.Value(node), errTag.Value(errCode)).Increment()
 	}
 }
 
@@ -270,11 +293,13 @@ func recordPushTime(xdsType string, duration time.Duration) {
 }
 
 func init() {
+	prometheus.MustRegister(xdsPushBytesTotal)
 	monitoring.MustRegister(
 		cdsReject,
 		edsReject,
 		ldsReject,
 		rdsReject,
+		vhdsReject,
 		xdsExpiredNonce,
 		totalXDSRejects,
 		monServices,

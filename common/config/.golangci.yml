@@ -107,6 +107,8 @@ linters-settings:
     - name: error-naming
     - name: increment-decrement
     - name: var-naming
+      arguments:
+        - ["URL"] # AllowList, xDS and istio already use `TypeUrl` as field name for a long time and we put `URL` in allow list to make the code style consistent.
     - name: package-comments
     - name: range
     - name: receiver-naming
@@ -238,6 +240,10 @@ linters-settings:
     packages-with-error-message:
     - github.com/gogo/protobuf: "gogo/protobuf is deprecated, use golang/protobuf"
     - golang.org/x/net/http2/h2c: "h2c.NewHandler is unsafe; use wrapper istio.io/istio/pkg/h2c"
+  stylecheck:
+     # Remove `URL` in initialisms's default list since xDS and istio have already use `TypeUrl` as field name for a long time.
+     # https://staticcheck.io/docs/configuration/options/#initialisms
+    initialisms: ["ACL", "API", "ASCII", "CPU", "CSS", "DNS", "EOF", "GUID", "HTML", "HTTP", "HTTPS", "ID", "IP", "JSON", "QPS", "RAM", "RPC", "SLA", "SMTP", "SQL", "SSH", "TCP", "TLS", "TTL", "UDP", "UI", "GID", "UID", "UUID", "URI", "UTF8", "VM", "XML", "XMPP", "XSRF", "XSS", "SIP", "RTP", "AMQP", "DB", "TS"]
 issues:
   # List of regexps of issue texts to exclude, empty list by default.
   # But independently from this option we use default exclude patterns,

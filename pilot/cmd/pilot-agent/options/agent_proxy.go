@@ -14,6 +14,8 @@
 
 package options
 
+import "istio.io/istio/pkg/keepalive"
+
 // ProxyArgs provides all of the configuration parameters for the Pilot proxy.
 type ProxyArgs struct {
 	DNSDomain          string
@@ -30,8 +32,9 @@ type ProxyArgs struct {
 	TemplateFile           string
 	OutlierLogPath         string
 
-	PodName      string
-	PodNamespace string
+	PodName          string
+	PodNamespace     string
+	KeepaliveOptions *keepalive.Options
 }
 
 // NewProxyArgs constructs proxyArgs with default values.
@@ -40,7 +43,7 @@ func NewProxyArgs() ProxyArgs {
 
 	// Apply Default Values.
 	p.applyDefaults()
-
+	p.KeepaliveOptions = keepalive.DefaultOption()
 	return p
 }
 

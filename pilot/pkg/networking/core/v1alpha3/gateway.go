@@ -158,7 +158,7 @@ func (configgen *ConfigGeneratorImpl) buildGatewayListeners(builder *ListenerBui
 			ml.mutable.Listener.GetName(), len(ml.mutable.Listener.GetFilterChains()))
 
 		// Filters are serialized one time into an opaque struct once we have the complete list.
-		if err := ml.mutable.build(builder, *ml.opts); err != nil {
+		if err := ml.mutable.build(builder, *ml.opts, false); err != nil {
 			errs = multierror.Append(errs, fmt.Errorf("gateway omitting listener %q due to: %v", ml.mutable.Listener.Name, err.Error()))
 			continue
 		}

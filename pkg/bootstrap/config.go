@@ -574,6 +574,8 @@ func GetNodeMetaData(options MetadataOptions) (*model.Node, error) {
 
 	meta.ProxyConfig = (*model.NodeMetaProxyConfig)(options.ProxyConfig)
 
+	meta.OnDemandXds = features.OnDemandXds && features.DeltaXds
+
 	extractAttributesMetadata(options.Envs, options.Platform, meta)
 	// Add all instance labels with lower precedence than pod labels
 	extractInstanceLabels(options.Platform, meta)
