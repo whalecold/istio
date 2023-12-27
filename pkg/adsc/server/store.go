@@ -27,6 +27,7 @@ import (
 
 const (
 	linkedIndexerName = "weLinkedToSeIndexer"
+	serviceAppLabel   = "registrysynctask.mse.paas.volcengine.com/mseApp"
 )
 
 // workloadEntryRefServiceEntryIndexer be used to find the WorkloadEntry that belongs to
@@ -40,6 +41,10 @@ func workloadEntryLinkedToServiceEntryIndexer(obj interface{}) ([]string, error)
 	if !ok {
 		return nil, nil
 	}
+	appName, ok := we.Labels[serviceAppLabel]
+	if !ok {
+		return nil, nil
+	}
 
 	// Should be in the same namespace when using refIndexer.
 	// Use the service account as it is kept consistent with the ServiceEntry name.
@@ -49,7 +54,7 @@ func workloadEntryLinkedToServiceEntryIndexer(obj interface{}) ([]string, error)
 			gvk.ServiceEntry.Version,
 			gvk.ServiceEntry.Kind,
 			cfg.Namespace,
-			we.ServiceAccount,
+			appName,
 		}, "/"),
 	}, nil
 }
