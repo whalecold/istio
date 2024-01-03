@@ -414,20 +414,20 @@ var (
 		}.MustBuild(),
 	}.MustBuild()
 
-	// RateLimit describes the collection rate limit
-	// RateLimit is a temporary type used to perform XDS type
+	// MseConfiguration describes the collection rate limit
+	// MseConfiguration is a temporary type used to perform XDS type
 	// this version we use configmap to store info, so there are some hack
 	// way to deal with code logic
 	// Todo: use java configuration's own CRD
-	RateLimit = collection.Builder{
-		Name:         "istio/v3/javaagent/v3alpha1/ratelimit",
-		VariableName: "IstioV3JavaagentV3alpha1RateLimits",
+	MseConfiguration = collection.Builder{
+		Name:         "istio/v3/javaagent/v3alpha1/mseconfigurations",
+		VariableName: "IstioV3JavaagentV3alpha1MseConfigurations",
 		Resource: resource.Builder{
 			Group:   "istio.v3alpha1.javaagent",
-			Kind:    "RateLimit",
-			Plural:  "ratelimits",
+			Kind:    "MseConfiguration",
+			Plural:  "mseconfigurations",
 			Version: "v3alpha1",
-			Proto:   "istio.v3alpha1.javaagent.v3alpha1.RateLimit",
+			Proto:   "istio.v3alpha1.javaagent.v3alpha1.MseConfiguration",
 			// java configuration actually reflect configmap, but we won't use this reflect in this version
 			ReflectType:   reflect.TypeOf(&k8sioapicorev1.ConfigMap{}).Elem(),
 			ProtoPackage:  "istio/v3/javaagent/v3alpha1",
@@ -836,7 +836,7 @@ var (
 			MustAdd(K8SGatewayApiV1Beta1Httproutes).
 			Build()
 
-	RateLimitAPI = collection.NewSchemasBuilder().MustAdd(RateLimit).Build()
+	MseConfigurationAPI = collection.NewSchemasBuilder().MustAdd(MseConfiguration).Build()
 
 	// Deprecated contains only collections used by that will soon be used by nothing.
 	Deprecated = collection.NewSchemasBuilder().

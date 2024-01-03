@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	RateLimit                    = config.GroupVersionKind{Group: "istio.v3alpha1.javaagent", Version: "v3alpha1", Kind: "RateLimit"}
+	MseConfiguration             = config.GroupVersionKind{Group: "istio.v3alpha1.javaagent", Version: "v3alpha1", Kind: "MseConfiguration"}
 	AuthorizationPolicy          = config.GroupVersionKind{Group: "security.istio.io", Version: "v1beta1", Kind: "AuthorizationPolicy"}
 	ConfigMap                    = config.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
 	CustomResourceDefinition     = config.GroupVersionKind{Group: "apiextensions.k8s.io", Version: "v1", Kind: "CustomResourceDefinition"}

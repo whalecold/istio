@@ -32,19 +32,19 @@ var _ model.XdsResourceGenerator = &LdsGenerator{}
 var skippedLdsConfigs = map[model.NodeType]map[kind.Kind]struct{}{
 	model.Router: {
 		// for autopassthrough gateways, we build filterchains per-dr subset
-		kind.WorkloadGroup: {},
-		kind.WorkloadEntry: {},
-		kind.Secret:        {},
-		kind.ProxyConfig:   {},
-		kind.RateLimit:     {},
+		kind.WorkloadGroup:    {},
+		kind.WorkloadEntry:    {},
+		kind.Secret:           {},
+		kind.ProxyConfig:      {},
+		kind.MseConfiguration: {},
 	},
 	model.SidecarProxy: {
-		kind.Gateway:       {},
-		kind.WorkloadGroup: {},
-		kind.WorkloadEntry: {},
-		kind.Secret:        {},
-		kind.ProxyConfig:   {},
-		kind.RateLimit:     {},
+		kind.Gateway:          {},
+		kind.WorkloadGroup:    {},
+		kind.WorkloadEntry:    {},
+		kind.Secret:           {},
+		kind.ProxyConfig:      {},
+		kind.MseConfiguration: {},
 	},
 }
 
