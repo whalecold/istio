@@ -19,6 +19,7 @@ import (
 
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	"github.com/golang/protobuf/jsonpb"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pilot/pkg/util/protoconv"
@@ -65,8 +66,8 @@ func buildServiceList(resourceNames []string) map[string]sets.String {
 }
 
 func isQueryResource(svcList map[string]sets.String, namespace, name string) bool {
-	// user not define resourceNames, return all
-	if svcList == nil {
+	// user does not specify resourceNames, return all
+	if len(svcList) == 0 {
 		return true
 	}
 	nameMap, ok := svcList[namespace]
@@ -79,17 +80,18 @@ func isQueryResource(svcList map[string]sets.String, namespace, name string) boo
 }
 
 const (
-	// LimitingConfigKey ...
-	LimitingConfigKey = "MseRateLimit"
+	// MseConfigurationKey ...
+	MseConfigurationKey = "MseConfiguration"
 )
 
 func (j *JdsGenerator) needPush(updates model.XdsUpdates) bool {
+	log.Info("needPush, ", updates)
 	if len(updates) == 0 {
 		return true
 	}
 
 	for config := range updates {
-		if config.Kind == kind.RateLimit {
+		if config.Kind == kind.MseConfiguration {
 			return true
 		}
 	}
@@ -101,40 +103,39 @@ func (j *JdsGenerator) Generate(_ *model.Proxy, w *model.WatchedResource, req *m
 		return nil, model.DefaultXdsLogDetails, nil
 	}
 
-	rateLimits := model.Resources{}
+	resources := make([]*discovery.Resource, 0)
 	// get java configuration configmap, if user not set ResourceNames, return all
 	serviceList := buildServiceList(w.ResourceNames)
 
-	cmList, err := j.Server.Env.ConfigStore.List(gvk.RateLimit, "")
+	cmList, err := j.Server.Env.ConfigStore.List(gvk.MseConfiguration, metav1.NamespaceAll)
 	if err != nil {
 		return nil, model.DefaultXdsLogDetails, err
 	}
 
-	for _, jc := range cmList {
-		if !isQueryResource(serviceList, jc.Namespace, jc.Name) {
+	for _, cm := range cmList {
+		if !isQueryResource(serviceList, cm.Namespace, cm.Name) {
 			continue
 		}
 
-		data, ok := jc.Spec.(map[string]string)
+		data, ok := cm.Spec.(map[string]string)
 		if !ok {
 			continue
 		}
 
-		mseRateLimit, ok := data[LimitingConfigKey]
+		val, ok := data[MseConfigurationKey]
 		if !ok {
 			continue
 		}
-
 		c := &v3alpha1.Configuration{}
-		if err := jsonpb.UnmarshalString(mseRateLimit, c); err != nil {
+		if err = jsonpb.UnmarshalString(val, c); err != nil {
 			return nil, model.DefaultXdsLogDetails, err
 		}
 
-		c.Name = jc.Name + "." + jc.Namespace
-		rateLimits = append(rateLimits, &discovery.Resource{
+		c.Name = cm.Name + "." + cm.Namespace
+		resources = append(resources, &discovery.Resource{
 			Resource: protoconv.MessageToAny(c),
 		})
 	}
 
-	return rateLimits, model.DefaultXdsLogDetails, nil
+	return resources, model.DefaultXdsLogDetails, nil
 }

@@ -388,8 +388,8 @@ var (
 		"If this is set to true, support for Kubernetes gateway-api (github.com/kubernetes-sigs/gateway-api) will "+
 			" be enabled. In addition to this being enabled, the gateway-api CRDs need to be installed.").Get()
 
-	EnableRateLimitAPI = env.Register("PILOT_ENABLE_RATE_LIMIT_API", true, ""+
-		"if this is set to true, support rate limit configuration api").Get()
+	EnableMseConfigurationAPI = env.Register("PILOT_ENABLE_MSE_CONFIGURATION_API", true, ""+
+		"if this is set to true, support mse configuration api").Get()
 
 	EnableGatewayAPIStatus = env.Register("PILOT_ENABLE_GATEWAY_API_STATUS", true,
 		"If this is set to true, gateway-api resources will have status written to them").Get()

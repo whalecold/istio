@@ -26,7 +26,7 @@ import (
 	"istio.io/istio/pilot/pkg/config/kube/gateway"
 	"istio.io/istio/pilot/pkg/config/kube/ingress"
 	ingressv1 "istio.io/istio/pilot/pkg/config/kube/ingressv1"
-	"istio.io/istio/pilot/pkg/config/kube/ratelimit"
+	"istio.io/istio/pilot/pkg/config/kube/mseconfig"
 	"istio.io/istio/pilot/pkg/config/memory"
 	configmonitor "istio.io/istio/pilot/pkg/config/monitor"
 	"istio.io/istio/pilot/pkg/features"
@@ -215,11 +215,11 @@ func (s *Server) initK8SConfigStore(args *PilotArgs) error {
 			return err
 		}
 	}
-	if features.EnableRateLimitAPI {
-		collections.Builtin = collections.Builtin.Union(collections.RateLimitAPI)
-		collections.PilotGatewayAPI = collections.PilotGatewayAPI.Union(collections.RateLimitAPI)
-		collections.All = collections.All.Union(collections.RateLimitAPI)
-		s.ConfigStores = append(s.ConfigStores, ratelimit.NewRateLimit(s.kubeClient))
+	if features.EnableMseConfigurationAPI {
+		collections.Builtin = collections.Builtin.Union(collections.MseConfigurationAPI)
+		collections.PilotGatewayAPI = collections.PilotGatewayAPI.Union(collections.MseConfigurationAPI)
+		collections.All = collections.All.Union(collections.MseConfigurationAPI)
+		s.ConfigStores = append(s.ConfigStores, mseconfig.NewMseConfiguration(s.kubeClient))
 	}
 
 	s.RWConfigStore, err = configaggregate.MakeWriteableCache(s.ConfigStores, configController)

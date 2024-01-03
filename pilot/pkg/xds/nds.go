@@ -45,7 +45,7 @@ var skippedNdsConfigs = map[kind.Kind]struct{}{
 	kind.RequestAuthentication: {},
 	kind.PeerAuthentication:    {},
 	kind.WasmPlugin:            {},
-	kind.RateLimit:             {},
+	kind.MseConfiguration:      {},
 }
 
 func ndsNeedsPush(req *model.PushRequest) bool {

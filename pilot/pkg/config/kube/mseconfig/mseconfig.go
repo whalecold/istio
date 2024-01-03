@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ratelimit
+package mseconfig
 
 import (
 	"sync"
@@ -30,9 +30,9 @@ import (
 	"istio.io/istio/pkg/kube"
 )
 
-// RateLimit used to watch rate limit configuration info
+// MseConfiguration used to watch rate limit configuration info
 // and signal notify if change
-type RateLimit struct {
+type MseConfiguration struct {
 	client     kube.Client
 	store      cache.Store
 	controller cache.Controller
@@ -45,8 +45,8 @@ const (
 	LabelConfig = "trafficmanager.mse.paas.volcengine.com/config"
 )
 
-func NewRateLimit(client kube.Client) *RateLimit {
-	res := &RateLimit{
+func NewMseConfiguration(client kube.Client) *MseConfiguration {
+	res := &MseConfiguration{
 		client: client,
 	}
 
@@ -57,11 +57,11 @@ func NewRateLimit(client kube.Client) *RateLimit {
 		for _, h := range handlers {
 			h(config.Config{
 				Meta: config.Meta{
-					GroupVersionKind: collections.RateLimit.Resource().GroupVersionKind(),
+					GroupVersionKind: collections.MseConfiguration.Resource().GroupVersionKind(),
 				},
 			}, config.Config{
 				Meta: config.Meta{
-					GroupVersionKind: collections.RateLimit.Resource().GroupVersionKind(),
+					GroupVersionKind: collections.MseConfiguration.Resource().GroupVersionKind(),
 				},
 			}, event)
 		}
@@ -90,8 +90,8 @@ func NewRateLimit(client kube.Client) *RateLimit {
 	return res
 }
 
-func (r *RateLimit) RegisterEventHandler(typ config.GroupVersionKind, handler model.EventHandler) {
-	if typ != collections.RateLimit.Resource().GroupVersionKind() {
+func (r *MseConfiguration) RegisterEventHandler(typ config.GroupVersionKind, handler model.EventHandler) {
+	if typ != collections.MseConfiguration.Resource().GroupVersionKind() {
 		return
 	}
 
@@ -100,35 +100,35 @@ func (r *RateLimit) RegisterEventHandler(typ config.GroupVersionKind, handler mo
 	r.handlers = append(r.handlers, handler)
 }
 
-func (r *RateLimit) SetWatchErrorHandler(f func(r *cache.Reflector, err error)) error {
+func (r *MseConfiguration) SetWatchErrorHandler(f func(r *cache.Reflector, err error)) error {
 	// Todo
 	return nil
 }
 
-func (r *RateLimit) HasStarted() bool {
+func (r *MseConfiguration) HasStarted() bool {
 	return r.client.HasStarted()
 }
 
-func (r *RateLimit) HasSynced() bool {
+func (r *MseConfiguration) HasSynced() bool {
 	return r.controller.HasSynced()
 }
 
-func (r *RateLimit) Run(stop <-chan struct{}) {
+func (r *MseConfiguration) Run(stop <-chan struct{}) {
 	r.controller.Run(stop)
 }
 
-func (r *RateLimit) Schemas() collection.Schemas {
-	return collection.SchemasFor(collections.RateLimit)
+func (r *MseConfiguration) Schemas() collection.Schemas {
+	return collection.SchemasFor(collections.MseConfiguration)
 }
 
-func (r *RateLimit) Get(typ config.GroupVersionKind, name, namespace string) *config.Config {
+func (r *MseConfiguration) Get(typ config.GroupVersionKind, name, namespace string) *config.Config {
 	// Todo
 	return nil
 }
 
 // List all configs, if namespace == "", list all
-func (r *RateLimit) List(typ config.GroupVersionKind, namespace string) ([]config.Config, error) {
-	if typ != collections.RateLimit.Resource().GroupVersionKind() {
+func (r *MseConfiguration) List(typ config.GroupVersionKind, namespace string) ([]config.Config, error) {
+	if typ != collections.MseConfiguration.Resource().GroupVersionKind() {
 		return nil, nil
 	}
 
@@ -154,26 +154,26 @@ func (r *RateLimit) List(typ config.GroupVersionKind, namespace string) ([]confi
 	return res, nil
 }
 
-func (r *RateLimit) Create(config config.Config) (revision string, err error) {
+func (r *MseConfiguration) Create(config config.Config) (revision string, err error) {
 	return "", nil
 }
 
-func (r *RateLimit) Update(config config.Config) (newRevision string, err error) {
+func (r *MseConfiguration) Update(config config.Config) (newRevision string, err error) {
 	return "", nil
 }
 
-func (r *RateLimit) UpdateStatus(config config.Config) (newRevision string, err error) {
+func (r *MseConfiguration) UpdateStatus(config config.Config) (newRevision string, err error) {
 	return "", nil
 }
 
-func (r *RateLimit) Patch(orig config.Config, patchFn config.PatchFunc) (string, error) {
+func (r *MseConfiguration) Patch(orig config.Config, patchFn config.PatchFunc) (string, error) {
 	return "", nil
 }
 
-func (r *RateLimit) Delete(typ config.GroupVersionKind, name, namespace string, resourceVersion *string) error {
+func (r *MseConfiguration) Delete(typ config.GroupVersionKind, name, namespace string, resourceVersion *string) error {
 	return nil
 }
 
-func (r *RateLimit) ListToConfigAppender(typ config.GroupVersionKind, namespace string, appender model.ConfigAppender) error {
+func (r *MseConfiguration) ListToConfigAppender(typ config.GroupVersionKind, namespace string, appender model.ConfigAppender) error {
 	return nil
 }
