@@ -129,10 +129,9 @@ func WithClusterID(clusterID cluster.ID) Option {
 	}
 }
 
-func WithLocalityGetters(getter LocalityGetter) Option {
-	return func(o *Controller) {
-		o.localityGetters = append(o.localityGetters, getter)
-	}
+// RegistryLocalityGetter ...
+func (c *Controller) RegistryLocalityGetter(getter LocalityGetter) {
+	c.localityGetters = append(c.localityGetters, getter)
 }
 
 func WithNetworkIDCb(cb func(endpointIP string, labels labels.Instance) network.ID) Option {

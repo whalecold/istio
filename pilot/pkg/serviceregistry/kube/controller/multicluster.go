@@ -41,6 +41,7 @@ import (
 	"istio.io/istio/pkg/kube/multicluster"
 	"istio.io/istio/pkg/kube/namespace"
 	"istio.io/istio/pkg/webhooks"
+	"istio.io/pkg/log"
 )
 
 const (
@@ -114,6 +115,7 @@ func NewMulticluster(
 		client:                 kc,
 		s:                      s,
 	}
+	mc.serviceEntryController.RegistryLocalityGetter(mc)
 
 	return mc
 }

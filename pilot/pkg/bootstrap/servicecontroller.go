@@ -31,9 +31,11 @@ func (s *Server) ServiceController() *aggregate.Controller {
 // initServiceControllers creates and initializes the service controllers
 func (s *Server) initServiceControllers(args *PilotArgs) error {
 	serviceControllers := s.ServiceController()
-	seControllerOptions := []serviceentry.Option{
+	s.serviceEntryController = serviceentry.NewController(
+		s.configController, s.XDSServer,
 		serviceentry.WithClusterID(s.clusterID),
-	}
+	)
+	serviceControllers.AddRegistry(s.serviceEntryController)
 
 	registered := make(map[provider.ID]bool)
 	for _, r := range args.RegistryOptions.Registries {
@@ -46,18 +48,11 @@ func (s *Server) initServiceControllers(args *PilotArgs) error {
 		log.Infof("Adding %s registry adapter", serviceRegistry)
 		switch serviceRegistry {
 		case provider.Kubernetes:
-			controller := s.initKubeRegistry(args)
-			seControllerOptions = append(seControllerOptions, serviceentry.WithLocalityGetters(controller))
+			s.initKubeRegistry(args)
 		default:
 			return fmt.Errorf("service registry %s is not supported", r)
 		}
 	}
-
-	s.serviceEntryController = serviceentry.NewController(
-		s.configController, s.XDSServer,
-		seControllerOptions...,
-	)
-	serviceControllers.AddRegistry(s.serviceEntryController)
 
 	// Defer running of the service controllers.
 	s.addStartFunc(func(stop <-chan struct{}) error {
@@ -69,7 +64,7 @@ func (s *Server) initServiceControllers(args *PilotArgs) error {
 }
 
 // initKubeRegistry creates all the k8s service controllers under this pilot
-func (s *Server) initKubeRegistry(args *PilotArgs) *kubecontroller.Multicluster {
+func (s *Server) initKubeRegistry(args *PilotArgs) {
 	args.RegistryOptions.KubeOptions.ClusterID = s.clusterID
 	args.RegistryOptions.KubeOptions.Metrics = s.environment
 	args.RegistryOptions.KubeOptions.XDSUpdater = s.XDSServer
@@ -92,5 +87,4 @@ func (s *Server) initKubeRegistry(args *PilotArgs) *kubecontroller.Multicluster 
 		s.environment.ClusterLocal(),
 		s.server)
 	s.multiclusterController.AddHandler(ctr)
-	return ctr
 }
