@@ -38,6 +38,10 @@ import (
 	netutil "istio.io/istio/pkg/util/net"
 )
 
+const (
+	sidecarClusterID = "sidecar.istio.io/cluster-id"
+)
+
 func convertPort(port *networking.Port) *model.Port {
 	return &model.Port{
 		Name:     port.Name,
@@ -274,7 +278,8 @@ func (s *Controller) convertEndpoint(service *model.Service, servicePort *networ
 		sa = spiffe.MustGenSpiffeURI(service.Attributes.Namespace, wle.ServiceAccount)
 	}
 	networkID := s.workloadEntryNetwork(wle)
-	labels := labelutil.AugmentLabels(wle.Labels, clusterID, wle.Locality, networkID)
+	locality := s.getLocality(addr, wle)
+	labels := labelutil.AugmentLabels(wle.Labels, clusterID, locality, networkID)
 	return &model.ServiceInstance{
 		Endpoint: &model.IstioEndpoint{
 			Address:         addr,
@@ -282,7 +287,7 @@ func (s *Controller) convertEndpoint(service *model.Service, servicePort *networ
 			ServicePortName: servicePort.Name,
 			Network:         network.ID(wle.Network),
 			Locality: model.Locality{
-				Label:     wle.Locality,
+				Label:     locality,
 				ClusterID: clusterID,
 			},
 			LbWeight:       wle.Weight,
@@ -297,6 +302,32 @@ func (s *Controller) convertEndpoint(service *model.Service, servicePort *networ
 		Service:     service,
 		ServicePort: convertPort(servicePort),
 	}
+}
+
+func (s *Controller) getLocality(addr string, wle *networking.WorkloadEntry) string {
+	if wle == nil {
+		return ""
+	}
+	if wle.Locality != "" {
+		return wle.Locality
+	}
+	if addr == "" {
+		return ""
+	}
+
+	clusterID, ok := wle.Labels[sidecarClusterID]
+	if !ok {
+		return ""
+	}
+
+	for _, handler := range s.localityHandlers {
+		// TODO get cluster from wle.
+		locality := handler(cluster.ID(clusterID), addr)
+		if locality != "" {
+			return locality
+		}
+	}
+	return ""
 }
 
 // convertWorkloadEntryToServiceInstances translates a WorkloadEntry into ServiceInstances. This logic is largely the
@@ -423,14 +454,15 @@ func (s *Controller) convertWorkloadEntryToWorkloadInstance(cfg config.Config, c
 		sa = spiffe.MustGenSpiffeURI(cfg.Namespace, we.ServiceAccount)
 	}
 	networkID := s.workloadEntryNetwork(we)
-	labels := labelutil.AugmentLabels(we.Labels, clusterID, we.Locality, networkID)
+	locality := s.getLocality(addr, we)
+	labels := labelutil.AugmentLabels(we.Labels, clusterID, locality, networkID)
 	return &model.WorkloadInstance{
 		Endpoint: &model.IstioEndpoint{
 			Address: addr,
 			// Not setting ports here as its done by k8s controller
 			Network: network.ID(we.Network),
 			Locality: model.Locality{
-				Label:     we.Locality,
+				Label:     locality,
 				ClusterID: clusterID,
 			},
 			LbWeight:  we.Weight,

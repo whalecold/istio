@@ -41,6 +41,7 @@ import (
 	"istio.io/istio/pkg/kube/multicluster"
 	"istio.io/istio/pkg/kube/namespace"
 	"istio.io/istio/pkg/webhooks"
+	"istio.io/pkg/log"
 )
 
 const (
@@ -72,7 +73,7 @@ type Multicluster struct {
 	configController       model.ConfigStoreController
 	XDSUpdater             model.XDSUpdater
 
-	m                     sync.Mutex // protects remoteKubeControllers
+	m                     sync.RWMutex // protects remoteKubeControllers
 	remoteKubeControllers map[cluster.ID]*kubeController
 	clusterLocal          model.ClusterLocalProvider
 
@@ -220,6 +221,21 @@ func (m *Multicluster) addCluster(cluster *multicluster.Cluster) (*kubeControlle
 	}
 	m.remoteKubeControllers[cluster.ID] = kubeController
 	return kubeController, kubeRegistry, &options, configCluster, nil
+}
+
+func (m *Multicluster) GetClusterLocalityByAddr(cluster cluster.ID, addr string) string {
+	m.m.RLock()
+	defer m.m.RUnlock()
+	if m.closing {
+		log.Warnf("Failed to get cluster locality for %s %s: server shutting down", addr, cluster)
+		return ""
+	}
+	clusterCtr, ok := m.remoteKubeControllers[cluster]
+	if !ok {
+		log.Warnf("Failed to get cluster locality for %s %s: cluster not found", addr, cluster)
+		return ""
+	}
+	return clusterCtr.GetLocalityByAddr(addr)
 }
 
 // initializeCluster initializes the cluster by setting various handlers.

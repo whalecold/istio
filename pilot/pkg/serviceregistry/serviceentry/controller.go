@@ -80,6 +80,8 @@ type configKey struct {
 	namespace string
 }
 
+type LocalityHandler func(clusterID cluster.ID, addr string) string
+
 // Controller communicates with ServiceEntry CRDs and monitors for changes.
 type Controller struct {
 	XdsUpdater model.XDSUpdater
@@ -104,6 +106,9 @@ type Controller struct {
 
 	workloadHandlers []func(*model.WorkloadInstance, model.Event)
 
+	// localityHandlers use for find out the locality of the WorkloadEntry
+	localityHandlers []LocalityHandler
+
 	// callback function used to get the networkID according to workload ip and labels.
 	networkIDCallback func(IP string, labels labels.Instance) network.ID
 
@@ -118,6 +123,12 @@ type Option func(*Controller)
 func WithClusterID(clusterID cluster.ID) Option {
 	return func(o *Controller) {
 		o.clusterID = clusterID
+	}
+}
+
+func WithLocalityHandler(handler LocalityHandler) Option {
+	return func(o *Controller) {
+		o.localityHandlers = append(o.localityHandlers, handler)
 	}
 }
 
