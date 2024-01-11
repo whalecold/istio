@@ -324,7 +324,13 @@ func (s *Controller) getLocality(addr string, wle *networking.WorkloadEntry) str
 	}
 
 	for _, getter := range s.localityGetters {
-		// TODO get cluster from wle.
+		// Under the mse condition, the instance may has Pod and WorkloadEntry at same time, try to
+		// get locality info from kube serviceregistry if they have same addr.
+		// Note: mesh may run in the underlay and overlay network
+		// 1. underlay network: the ip of pod and vm use the same cidr, Pod and WorkloadEntry should keep consistent if
+		//    they have same addr
+		// 2. overlay network: the ip of pod and vm use different cidr, so the ip can not be conflict. It can be conflict if the
+		//    two pods in different clusters, use the clusterID attr to distinguish it.
 		locality, err := getter.GetLocalityByAddr(cluster.ID(clusterID), addr)
 		if err != nil {
 			log.Warnf("get locality from cluster %s for address %s failed: %v", clusterID, addr, err)
