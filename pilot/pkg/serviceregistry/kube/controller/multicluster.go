@@ -226,11 +226,11 @@ func (m *Multicluster) GetLocalityByAddr(cluster cluster.ID, addr string) (strin
 	m.m.RLock()
 	defer m.m.RUnlock()
 	if m.closing {
-		return "", fmt.Errorf("Failed to get cluster locality for %s %s: server shutting down", addr, cluster)
+		return "", fmt.Errorf("failed to get cluster locality for %s %s: server shutting down", addr, cluster)
 	}
 	clusterCtr, ok := m.remoteKubeControllers[cluster]
 	if !ok {
-		return "", fmt.Errorf("Failed to get cluster locality for %s %s: cluster not found", addr, cluster)
+		return "", fmt.Errorf("failed to get cluster locality for %s %s: cluster not found", addr, cluster)
 	}
 	return clusterCtr.GetLocalityByAddr(addr)
 }

@@ -327,7 +327,7 @@ func (s *Controller) getLocality(addr string, wle *networking.WorkloadEntry) str
 		// TODO get cluster from wle.
 		locality, err := getter.GetLocalityByAddr(cluster.ID(clusterID), addr)
 		if err != nil {
-			log.Errorf("get locality from cluster %s for address %s failed: %v", clusterID, addr, err)
+			log.Warnf("get locality from cluster %s for address %s failed: %v", clusterID, addr, err)
 			continue
 		}
 		if locality != "" {
