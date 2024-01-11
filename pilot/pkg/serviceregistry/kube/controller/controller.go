@@ -734,16 +734,15 @@ func tryGetLatestObject(informer informer.FilteredSharedIndexInformer, obj any) 
 }
 
 // GetLocalityByAddr returns the locality info for the addr of the cluster
-func (c *Controller) GetLocalityByAddr(addr string) string {
+func (c *Controller) GetLocalityByAddr(addr string) (string, error) {
 	if !c.HasSynced() {
-		log.Warnf("cluster %s has not synced when getLocalityLabel for addr %s", c.opts.ClusterID, addr)
-		return ""
+		return "", fmt.Errorf("cluster %s has not synced when getLocalityLabel for addr %s", c.opts.ClusterID, addr)
 	}
 	pod := c.pods.getPodByIP(addr)
 	if pod == nil {
-		return ""
+		return "", nil
 	}
-	return c.getPodLocality(pod)
+	return c.getPodLocality(pod), nil
 }
 
 // HasSynced returns true after the initial state synchronization

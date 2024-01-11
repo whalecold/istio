@@ -47,7 +47,7 @@ func (s *Server) initServiceControllers(args *PilotArgs) error {
 		switch serviceRegistry {
 		case provider.Kubernetes:
 			controller := s.initKubeRegistry(args)
-			seControllerOptions = append(seControllerOptions, serviceentry.WithLocalityHandler(controller.GetClusterLocalityByAddr))
+			seControllerOptions = append(seControllerOptions, serviceentry.WithLocalityGetters(controller))
 		default:
 			return fmt.Errorf("service registry %s is not supported", r)
 		}

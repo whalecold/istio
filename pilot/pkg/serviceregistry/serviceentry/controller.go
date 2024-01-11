@@ -80,7 +80,10 @@ type configKey struct {
 	namespace string
 }
 
-type LocalityHandler func(clusterID cluster.ID, addr string) string
+// LocalityGetter is an interface that knows how to get the locality of an endpoint
+type LocalityGetter interface {
+	GetLocalityByAddr(clusterID cluster.ID, addr string) (string, error)
+}
 
 // Controller communicates with ServiceEntry CRDs and monitors for changes.
 type Controller struct {
@@ -106,8 +109,8 @@ type Controller struct {
 
 	workloadHandlers []func(*model.WorkloadInstance, model.Event)
 
-	// localityHandlers use for find out the locality of the WorkloadEntry
-	localityHandlers []LocalityHandler
+	// localityGetters use for find out the locality of the WorkloadEntry
+	localityGetters []LocalityGetter
 
 	// callback function used to get the networkID according to workload ip and labels.
 	networkIDCallback func(IP string, labels labels.Instance) network.ID
@@ -126,9 +129,9 @@ func WithClusterID(clusterID cluster.ID) Option {
 	}
 }
 
-func WithLocalityHandler(handler LocalityHandler) Option {
+func WithLocalityGetters(getter LocalityGetter) Option {
 	return func(o *Controller) {
-		o.localityHandlers = append(o.localityHandlers, handler)
+		o.localityGetters = append(o.localityGetters, getter)
 	}
 }
 

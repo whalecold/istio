@@ -315,14 +315,21 @@ func (s *Controller) getLocality(addr string, wle *networking.WorkloadEntry) str
 		return ""
 	}
 
+	if !netutil.IsValidIPAddress(addr) {
+		return ""
+	}
 	clusterID, ok := wle.Labels[sidecarClusterID]
 	if !ok {
 		return ""
 	}
 
-	for _, handler := range s.localityHandlers {
+	for _, getter := range s.localityGetters {
 		// TODO get cluster from wle.
-		locality := handler(cluster.ID(clusterID), addr)
+		locality, err := getter.GetLocalityByAddr(cluster.ID(clusterID), addr)
+		if err != nil {
+			log.Errorf("get locality from cluster %s for address %s failed: %v", clusterID, addr, err)
+			continue
+		}
 		if locality != "" {
 			return locality
 		}

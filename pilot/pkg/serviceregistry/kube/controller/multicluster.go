@@ -41,7 +41,6 @@ import (
 	"istio.io/istio/pkg/kube/multicluster"
 	"istio.io/istio/pkg/kube/namespace"
 	"istio.io/istio/pkg/webhooks"
-	"istio.io/pkg/log"
 )
 
 const (
@@ -223,17 +222,15 @@ func (m *Multicluster) addCluster(cluster *multicluster.Cluster) (*kubeControlle
 	return kubeController, kubeRegistry, &options, configCluster, nil
 }
 
-func (m *Multicluster) GetClusterLocalityByAddr(cluster cluster.ID, addr string) string {
+func (m *Multicluster) GetLocalityByAddr(cluster cluster.ID, addr string) (string, error) {
 	m.m.RLock()
 	defer m.m.RUnlock()
 	if m.closing {
-		log.Warnf("Failed to get cluster locality for %s %s: server shutting down", addr, cluster)
-		return ""
+		return "", fmt.Errorf("Failed to get cluster locality for %s %s: server shutting down", addr, cluster)
 	}
 	clusterCtr, ok := m.remoteKubeControllers[cluster]
 	if !ok {
-		log.Warnf("Failed to get cluster locality for %s %s: cluster not found", addr, cluster)
-		return ""
+		return "", fmt.Errorf("Failed to get cluster locality for %s %s: cluster not found", addr, cluster)
 	}
 	return clusterCtr.GetLocalityByAddr(addr)
 }
