@@ -331,6 +331,7 @@ func (s *Controller) getLocality(addr string, wle *networking.WorkloadEntry) str
 		//    they have same addr
 		// 2. overlay network: the ip of pod and vm use different cidr, so the ip can not be conflict. It can be conflict if the
 		//    two pods in different clusters, use the clusterID attr to distinguish it.
+		// 2024.01.11 @zhenglisheng.zhengls
 		locality, err := getter.GetLocalityByAddr(cluster.ID(clusterID), addr)
 		if err != nil {
 			log.Warnf("get locality from cluster %s for address %s failed: %v", clusterID, addr, err)
