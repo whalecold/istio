@@ -671,11 +671,11 @@ func (s *DiscoveryServer) initializeProxy(con *Connection) error {
 }
 
 func (s *DiscoveryServer) computeProxyState(proxy *model.Proxy, request *model.PushRequest) {
-	proxy.SetServiceInstances(s.Env.ServiceDiscovery)
+	instanceChanged := proxy.SetServiceInstances(s.Env.ServiceDiscovery)
 	// only recompute workload labels when
 	// 1. stream established and proxy first time initialization
 	// 2. proxy update
-	recomputeLabels := request == nil || request.IsProxyUpdate()
+	recomputeLabels := request == nil || request.IsProxyUpdate() || instanceChanged
 	if recomputeLabels {
 		proxy.SetWorkloadLabels(s.Env)
 		setTopologyLabels(proxy)

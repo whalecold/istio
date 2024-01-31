@@ -733,6 +733,19 @@ func tryGetLatestObject(informer informer.FilteredSharedIndexInformer, obj any) 
 	return latest
 }
 
+// GetLocalityByAddr returns the locality info for the addr of the cluster.
+// That includes pending and deleting pod info.
+func (c *Controller) GetLocalityByAddr(addr string) (string, error) {
+	if !c.HasSynced() {
+		return "", fmt.Errorf("cluster %s has not synced when getLocalityLabel for addr %s", c.opts.ClusterID, addr)
+	}
+	nodeName := c.pods.getNodeNameByIP(addr)
+	if nodeName == "" {
+		return "", nil
+	}
+	return c.getNodeLocality(nodeName)
+}
+
 // HasSynced returns true after the initial state synchronization
 func (c *Controller) HasSynced() bool {
 	return c.initialSync.Load()
@@ -895,15 +908,22 @@ func (c *Controller) getPodLocality(pod *v1.Pod) string {
 	if len(pod.Labels[model.LocalityLabel]) > 0 {
 		return model.GetLocalityLabelOrDefault(pod.Labels[model.LocalityLabel], "")
 	}
+	locality, err := c.getNodeLocality(pod.Spec.NodeName)
+	if err != nil {
+		log.Warnf("failed to get node locality for pod %s/%s: %v", pod.Namespace, pod.Name, err)
+	}
+	return locality
+}
 
+func (c *Controller) getNodeLocality(nodeName string) (string, error) {
 	// NodeName is set by the scheduler after the pod is created
 	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#late-initialization
-	node, err := c.nodeLister.Get(pod.Spec.NodeName)
+	node, err := c.nodeLister.Get(nodeName)
 	if err != nil {
-		if pod.Spec.NodeName != "" {
-			log.Warnf("unable to get node %q for pod %q/%q: %v", pod.Spec.NodeName, pod.Namespace, pod.Name, err)
+		if nodeName != "" {
+			return "", fmt.Errorf("error getting node %q: %v", nodeName, err)
 		}
-		return ""
+		return "", nil
 	}
 
 	region := getLabelValue(node.ObjectMeta, NodeRegionLabelGA, NodeRegionLabel)
@@ -911,10 +931,10 @@ func (c *Controller) getPodLocality(pod *v1.Pod) string {
 	subzone := getLabelValue(node.ObjectMeta, label.TopologySubzone.Name, "")
 
 	if region == "" && zone == "" && subzone == "" {
-		return ""
+		return "", nil
 	}
 
-	return region + "/" + zone + "/" + subzone // Format: "%s/%s/%s"
+	return region + "/" + zone + "/" + subzone, nil // Format: "%s/%s/%s"
 }
 
 // InstancesByPort implements a service catalog operation

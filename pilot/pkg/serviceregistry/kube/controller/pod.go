@@ -41,6 +41,15 @@ type PodCache struct {
 	// pod cache if a pod changes IP.
 	IPByPods map[string]string
 
+	nodeLock sync.RWMutex
+	// nodesByIP maintains stable pod IP to node name key mapping
+	// this allows us to retrieve the latest node name by pod IP.
+	// This contains RUNNING UNREADY pods with an allocated IP.
+	// In podsByIP, UNREADY pods are regarded as unavailable instance,
+	// but once workloadEntry is created, the corresponding pod will be READY.
+	// Just used for workloadEntry node metadata retrieving.
+	nodesByIP map[string]string
+
 	// needResync is map of IP to endpoint namespace/name. This is used to requeue endpoint
 	// events when pod event comes. This typically happens when pod is not available
 	// in podCache when endpoint event comes.
@@ -55,6 +64,7 @@ func newPodCache(c *Controller, informer informer.FilteredSharedIndexInformer, q
 		informer:           informer,
 		c:                  c,
 		podsByIP:           make(map[string]string),
+		nodesByIP:          make(map[string]string),
 		IPByPods:           make(map[string]string),
 		needResync:         make(map[string]sets.String),
 		queueEndpointEvent: queueEndpointEvent,
@@ -141,6 +151,7 @@ func (pc *PodCache) onEvent(curr any, ev model.Event) error {
 	}
 
 	ip := pod.Status.PodIP
+	nodeName := pod.Spec.NodeName
 	// PodIP will be empty when pod is just created, but before the IP is assigned
 	// via UpdateStatus.
 	if len(ip) == 0 {
@@ -150,6 +161,7 @@ func (pc *PodCache) onEvent(curr any, ev model.Event) error {
 	key := kube.KeyFunc(pod.Name, pod.Namespace)
 	switch ev {
 	case model.EventAdd:
+		pc.updateNodeNameByIP(ip, nodeName)
 		// can happen when istiod just starts
 		if pod.DeletionTimestamp != nil || !IsPodReady(pod) {
 			return nil
@@ -159,6 +171,7 @@ func (pc *PodCache) onEvent(curr any, ev model.Event) error {
 			return nil
 		}
 	case model.EventUpdate:
+		pc.updateNodeNameByIP(ip, nodeName)
 		if pod.DeletionTimestamp != nil || !IsPodReady(pod) {
 			// delete only if this pod was in the cache
 			pc.deleteIP(ip, key)
@@ -169,6 +182,7 @@ func (pc *PodCache) onEvent(curr any, ev model.Event) error {
 			return nil
 		}
 	case model.EventDelete:
+		pc.deleteNodeNameByIP(ip)
 		// delete only if this pod was in the cache,
 		// in most case it has already been deleted in `UPDATE` with `DeletionTimestamp` set.
 		if !pc.deleteIP(ip, key) {
@@ -223,6 +237,24 @@ func (pc *PodCache) deleteIP(ip string, podKey string) bool {
 		return true
 	}
 	return false
+}
+
+func (pc *PodCache) deleteNodeNameByIP(ip string) {
+	pc.nodeLock.Lock()
+	defer pc.nodeLock.Unlock()
+	delete(pc.nodesByIP, ip)
+}
+
+func (pc *PodCache) updateNodeNameByIP(ip, nodeName string) {
+	pc.nodeLock.Lock()
+	defer pc.nodeLock.Unlock()
+	pc.nodesByIP[ip] = nodeName
+}
+
+func (pc *PodCache) getNodeNameByIP(ip string) string {
+	pc.nodeLock.RLock()
+	defer pc.nodeLock.RUnlock()
+	return pc.nodesByIP[ip]
 }
 
 func (pc *PodCache) update(ip, key string) {

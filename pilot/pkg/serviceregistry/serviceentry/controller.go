@@ -19,9 +19,11 @@ import (
 	"reflect"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
+	utilserrors "k8s.io/apimachinery/pkg/util/errors"
 
 	networking "istio.io/api/networking/v1alpha3"
 	"istio.io/istio/pilot/pkg/features"
@@ -80,6 +82,30 @@ type configKey struct {
 	namespace string
 }
 
+// LocalityGetter is an interface that knows how to get the locality of an endpoint
+type LocalityGetter interface {
+	GetLocalityByAddr(clusterID cluster.ID, addr string) (string, error)
+}
+
+// LocalityGetterAggregate is a collection of LocalityGetters
+type LocalityGetterAggregate []LocalityGetter
+
+// GetLocalityByAddr implement the LocalityGetter interface
+func (lgs LocalityGetterAggregate) GetLocalityByAddr(clusterID cluster.ID, addr string) (string, error) {
+	errors := make([]error, 0, len(lgs))
+	for _, getter := range lgs {
+		locality, err := getter.GetLocalityByAddr(clusterID, addr)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+		if locality != "" {
+			return locality, nil
+		}
+	}
+	return "", utilserrors.NewAggregate(errors)
+}
+
 // Controller communicates with ServiceEntry CRDs and monitors for changes.
 type Controller struct {
 	XdsUpdater model.XDSUpdater
@@ -104,6 +130,9 @@ type Controller struct {
 
 	workloadHandlers []func(*model.WorkloadInstance, model.Event)
 
+	// localityGetter use for find out the locality of the WorkloadEntry
+	localityGetter atomic.Value
+
 	// callback function used to get the networkID according to workload ip and labels.
 	networkIDCallback func(IP string, labels labels.Instance) network.ID
 
@@ -119,6 +148,23 @@ func WithClusterID(clusterID cluster.ID) Option {
 	return func(o *Controller) {
 		o.clusterID = clusterID
 	}
+}
+
+// SetLocalityGetter set locality getter
+func (s *Controller) SetLocalityGetter(getter LocalityGetter) {
+	s.localityGetter.Store(getter)
+}
+
+// GetLocalityGetter get locality getter
+func (s *Controller) GetLocalityGetter() LocalityGetter {
+	val := s.localityGetter.Load()
+	if val == nil {
+		return nil
+	}
+	if getter, ok := val.(LocalityGetter); ok {
+		return getter
+	}
+	return nil
 }
 
 func WithNetworkIDCb(cb func(endpointIP string, labels labels.Instance) network.ID) Option {

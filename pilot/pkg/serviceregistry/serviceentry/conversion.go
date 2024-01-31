@@ -38,6 +38,10 @@ import (
 	netutil "istio.io/istio/pkg/util/net"
 )
 
+const (
+	sidecarClusterID = "sidecar.mesh.io/cluster-id"
+)
+
 func convertPort(port *networking.Port) *model.Port {
 	return &model.Port{
 		Name:     port.Name,
@@ -274,7 +278,8 @@ func (s *Controller) convertEndpoint(service *model.Service, servicePort *networ
 		sa = spiffe.MustGenSpiffeURI(service.Attributes.Namespace, wle.ServiceAccount)
 	}
 	networkID := s.workloadEntryNetwork(wle)
-	labels := labelutil.AugmentLabels(wle.Labels, clusterID, wle.Locality, networkID)
+	locality := s.getLocality(wle)
+	labels := labelutil.AugmentLabels(wle.Labels, clusterID, locality, networkID)
 	return &model.ServiceInstance{
 		Endpoint: &model.IstioEndpoint{
 			Address:         addr,
@@ -282,7 +287,7 @@ func (s *Controller) convertEndpoint(service *model.Service, servicePort *networ
 			ServicePortName: servicePort.Name,
 			Network:         network.ID(wle.Network),
 			Locality: model.Locality{
-				Label:     wle.Locality,
+				Label:     locality,
 				ClusterID: clusterID,
 			},
 			LbWeight:       wle.Weight,
@@ -297,6 +302,46 @@ func (s *Controller) convertEndpoint(service *model.Service, servicePort *networ
 		Service:     service,
 		ServicePort: convertPort(servicePort),
 	}
+}
+
+func (s *Controller) getLocality(wle *networking.WorkloadEntry) string {
+	if wle == nil {
+		return ""
+	}
+	if wle.Locality != "" {
+		return wle.Locality
+	}
+	addr := wle.GetAddress()
+	if addr == "" {
+		return ""
+	}
+
+	if !netutil.IsValidIPAddress(addr) {
+		return ""
+	}
+	clusterID, ok := wle.Labels[sidecarClusterID]
+	if !ok {
+		return ""
+	}
+
+	getter := s.GetLocalityGetter()
+	if getter == nil {
+		log.Warnf("get locality from cluster %s for address %s failed as locality getter is nil", clusterID, addr)
+		return ""
+	}
+	// Under the mse condition, the instance may has Pod and WorkloadEntry at same time, try to
+	// get locality info from kube serviceregistry if they have same addr.
+	// Note: mesh may run in the underlay and overlay network
+	// 1. underlay network: the ip of pod and vm use the same cidr, Pod and WorkloadEntry should keep consistent if
+	//    they have same addr
+	// 2. overlay network: the ip of pod and vm use different cidr, so the ip can not be conflict. It can be conflict if the
+	//    two pods in different clusters, use the clusterID attr to distinguish it.
+	// 2024.01.11 @zhenglisheng.zhengls
+	locality, err := getter.GetLocalityByAddr(cluster.ID(clusterID), addr)
+	if err != nil || locality == "" {
+		log.Warnf("get locality from cluster %s for address %s failed: %v", clusterID, addr, err)
+	}
+	return locality
 }
 
 // convertWorkloadEntryToServiceInstances translates a WorkloadEntry into ServiceInstances. This logic is largely the
@@ -423,14 +468,15 @@ func (s *Controller) convertWorkloadEntryToWorkloadInstance(cfg config.Config, c
 		sa = spiffe.MustGenSpiffeURI(cfg.Namespace, we.ServiceAccount)
 	}
 	networkID := s.workloadEntryNetwork(we)
-	labels := labelutil.AugmentLabels(we.Labels, clusterID, we.Locality, networkID)
+	locality := s.getLocality(we)
+	labels := labelutil.AugmentLabels(we.Labels, clusterID, locality, networkID)
 	return &model.WorkloadInstance{
 		Endpoint: &model.IstioEndpoint{
 			Address: addr,
 			// Not setting ports here as its done by k8s controller
 			Network: network.ID(we.Network),
 			Locality: model.Locality{
-				Label:     we.Locality,
+				Label:     locality,
 				ClusterID: clusterID,
 			},
 			LbWeight:  we.Weight,

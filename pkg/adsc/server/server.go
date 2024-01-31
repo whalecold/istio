@@ -47,7 +47,7 @@ const (
 type server struct {
 	port  int
 	store model.ConfigStoreController
-	// stores the relationship with query type and gvk info.
+	// stores the relationship with retrieved type and gvk info.
 	kinds        map[string]config.GroupVersionKind
 	indexedStore *serviceInstancesStore
 	limiter      *rate.Limiter
