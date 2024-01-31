@@ -31,13 +31,13 @@ func (s *Server) ServiceController() *aggregate.Controller {
 // initServiceControllers creates and initializes the service controllers
 func (s *Server) initServiceControllers(args *PilotArgs) error {
 	serviceControllers := s.ServiceController()
-
 	s.serviceEntryController = serviceentry.NewController(
 		s.configController, s.XDSServer,
 		serviceentry.WithClusterID(s.clusterID),
 	)
 	serviceControllers.AddRegistry(s.serviceEntryController)
 
+	var getters serviceentry.LocalityGetterAggregate
 	registered := make(map[provider.ID]bool)
 	for _, r := range args.RegistryOptions.Registries {
 		serviceRegistry := provider.ID(r)
@@ -49,13 +49,13 @@ func (s *Server) initServiceControllers(args *PilotArgs) error {
 		log.Infof("Adding %s registry adapter", serviceRegistry)
 		switch serviceRegistry {
 		case provider.Kubernetes:
-			if err := s.initKubeRegistry(args); err != nil {
-				return err
-			}
+			getter := s.initKubeRegistry(args)
+			getters = append(getters, getter)
 		default:
 			return fmt.Errorf("service registry %s is not supported", r)
 		}
 	}
+	s.serviceEntryController.SetLocalityGetter(getters)
 
 	// Defer running of the service controllers.
 	s.addStartFunc(func(stop <-chan struct{}) error {
@@ -67,7 +67,7 @@ func (s *Server) initServiceControllers(args *PilotArgs) error {
 }
 
 // initKubeRegistry creates all the k8s service controllers under this pilot
-func (s *Server) initKubeRegistry(args *PilotArgs) (err error) {
+func (s *Server) initKubeRegistry(args *PilotArgs) *kubecontroller.Multicluster {
 	args.RegistryOptions.KubeOptions.ClusterID = s.clusterID
 	args.RegistryOptions.KubeOptions.Metrics = s.environment
 	args.RegistryOptions.KubeOptions.XDSUpdater = s.XDSServer
@@ -77,7 +77,8 @@ func (s *Server) initKubeRegistry(args *PilotArgs) (err error) {
 	args.RegistryOptions.KubeOptions.MeshServiceController = s.ServiceController()
 	// pass namespace to k8s service registry
 	args.RegistryOptions.KubeOptions.DiscoveryNamespacesFilter = s.multiclusterController.DiscoveryNamespacesFilter
-	s.multiclusterController.AddHandler(kubecontroller.NewMulticluster(args.PodName,
+
+	ctr := kubecontroller.NewMulticluster(args.PodName,
 		s.kubeClient.Kube(),
 		args.RegistryOptions.ClusterRegistriesNamespace,
 		args.RegistryOptions.KubeOptions,
@@ -87,7 +88,7 @@ func (s *Server) initKubeRegistry(args *PilotArgs) (err error) {
 		args.Revision,
 		s.shouldStartNsController(),
 		s.environment.ClusterLocal(),
-		s.server))
-
-	return
+		s.server)
+	s.multiclusterController.AddHandler(ctr)
+	return ctr
 }

@@ -863,9 +863,10 @@ func (node *Proxy) SetGatewaysForProxy(ps *PushContext) {
 	node.MergedGateway = ps.mergeGateways(node)
 }
 
-func (node *Proxy) SetServiceInstances(serviceDiscovery ServiceDiscovery) {
+func (node *Proxy) SetServiceInstances(serviceDiscovery ServiceDiscovery) bool {
 	instances := serviceDiscovery.GetProxyServiceInstances(node)
 
+	changed := len(instances) != len(node.ServiceInstances)
 	// Keep service instances in order of creation/hostname.
 	sort.SliceStable(instances, func(i, j int) bool {
 		if instances[i].Service != nil && instances[j].Service != nil {
@@ -879,6 +880,7 @@ func (node *Proxy) SetServiceInstances(serviceDiscovery ServiceDiscovery) {
 	})
 
 	node.ServiceInstances = instances
+	return changed
 }
 
 // SetWorkloadLabels will set the node.Labels.

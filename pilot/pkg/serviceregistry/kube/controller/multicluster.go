@@ -72,7 +72,7 @@ type Multicluster struct {
 	configController       model.ConfigStoreController
 	XDSUpdater             model.XDSUpdater
 
-	m                     sync.Mutex // protects remoteKubeControllers
+	m                     sync.RWMutex // protects remoteKubeControllers
 	remoteKubeControllers map[cluster.ID]*kubeController
 	clusterLocal          model.ClusterLocalProvider
 
@@ -114,7 +114,6 @@ func NewMulticluster(
 		client:                 kc,
 		s:                      s,
 	}
-
 	return mc
 }
 
@@ -220,6 +219,19 @@ func (m *Multicluster) addCluster(cluster *multicluster.Cluster) (*kubeControlle
 	}
 	m.remoteKubeControllers[cluster.ID] = kubeController
 	return kubeController, kubeRegistry, &options, configCluster, nil
+}
+
+func (m *Multicluster) GetLocalityByAddr(cluster cluster.ID, addr string) (string, error) {
+	m.m.RLock()
+	defer m.m.RUnlock()
+	if m.closing {
+		return "", fmt.Errorf("failed to get cluster locality for %s %s: server shutting down", addr, cluster)
+	}
+	clusterCtr, ok := m.remoteKubeControllers[cluster]
+	if !ok {
+		return "", fmt.Errorf("failed to get cluster locality for %s %s: cluster not found", addr, cluster)
+	}
+	return clusterCtr.GetLocalityByAddr(addr)
 }
 
 // initializeCluster initializes the cluster by setting various handlers.

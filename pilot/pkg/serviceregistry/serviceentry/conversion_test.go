@@ -1221,6 +1221,113 @@ func TestConvertWorkloadEntryToWorkloadInstance(t *testing.T) {
 	}
 }
 
+type fakeLocalityGetter struct {
+	infos map[string]string
+}
+
+func (s *fakeLocalityGetter) GetLocalityByAddr(c cluster.ID, addr string) (string, error) {
+	key := string(c) + "/" + addr
+	return s.infos[key], nil
+}
+
+func newFakeLocalityGetter(infos map[string]string) *fakeLocalityGetter {
+	return &fakeLocalityGetter{infos: infos}
+}
+
+func TestGetLocality(t *testing.T) {
+	ctr := &Controller{}
+	ctr.SetLocalityGetter(newFakeLocalityGetter(map[string]string{
+		"c1/1.1.1.1":      "region1/zone1/subzone1",
+		"c1/1.1.1.2":      "region1/zone2/subzone1",
+		"c3/1.1.1.1":      "region2/zone1/subzone1",
+		"c55/192.168.0.1": "second info",
+	}))
+	tests := []struct {
+		name     string
+		wle      *networking.WorkloadEntry
+		expected string
+	}{
+		{
+			name:     "empty WorkloadEntry",
+			expected: "",
+		},
+		{
+			name: "locality from WorkloadEntry",
+			wle: &networking.WorkloadEntry{
+				Address:  "1.1.1.1",
+				Locality: "test",
+				Labels: map[string]string{
+					sidecarClusterID: "c1",
+				},
+			},
+			expected: "test",
+		},
+		{
+			name: "empty addr",
+			wle: &networking.WorkloadEntry{
+				Labels: map[string]string{
+					sidecarClusterID: "c1",
+				},
+			},
+			expected: "",
+		},
+		{
+			name: "empty cluster",
+			wle: &networking.WorkloadEntry{
+				Address: "1.1.1.1",
+			},
+			expected: "",
+		},
+		{
+			name: "invalid addr",
+			wle: &networking.WorkloadEntry{
+				Address: "1.1.1.xx",
+				Labels: map[string]string{
+					sidecarClusterID: "c1",
+				},
+			},
+			expected: "",
+		},
+		{
+			name: "locality from first getter",
+			wle: &networking.WorkloadEntry{
+				Address: "1.1.1.1",
+				Labels: map[string]string{
+					sidecarClusterID: "c1",
+				},
+			},
+			expected: "region1/zone1/subzone1",
+		},
+		{
+			name: "locality from second getter",
+			wle: &networking.WorkloadEntry{
+				Address: "192.168.0.1",
+				Labels: map[string]string{
+					sidecarClusterID: "c55",
+				},
+			},
+			expected: "second info",
+		},
+		{
+			name: "not found",
+			wle: &networking.WorkloadEntry{
+				Address: "192.168.0.2",
+				Labels: map[string]string{
+					sidecarClusterID: "c55",
+				},
+			},
+			expected: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ctr.getLocality(tt.wle); got != tt.expected {
+				t.Errorf("getLocality() = %v, expected %v", got, tt.expected)
+			}
+		})
+	}
+}
+
 func compare(t testing.TB, actual, expected any) error {
 	return util.Compare(jsonBytes(t, actual), jsonBytes(t, expected))
 }

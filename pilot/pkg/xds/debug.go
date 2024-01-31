@@ -102,13 +102,14 @@ Note: Use <b>pretty</b> in query string (like <b>debug/configz?pretty</b>) to fo
 
 // AdsClient defines the data that is displayed on "/adsz" endpoint.
 type AdsClient struct {
-	ConnectionID string              `json:"connectionId"`
-	ConnectedAt  time.Time           `json:"connectedAt"`
-	PeerAddress  string              `json:"address"`
-	Labels       map[string]string   `json:"labels"`
-	Metadata     *model.NodeMetadata `json:"metadata,omitempty"`
-	Locality     *core.Locality      `json:"locality,omitempty"`
-	Watches      map[string][]string `json:"watches,omitempty"`
+	ConnectionID     string                   `json:"connectionId"`
+	ConnectedAt      time.Time                `json:"connectedAt"`
+	PeerAddress      string                   `json:"address"`
+	Labels           map[string]string        `json:"labels"`
+	Metadata         *model.NodeMetadata      `json:"metadata,omitempty"`
+	Locality         *core.Locality           `json:"locality,omitempty"`
+	Watches          map[string][]string      `json:"watches,omitempty"`
+	ServiceInstances []*model.ServiceInstance `json:"serviceInstances,omitempty"`
 }
 
 // AdsClients is collection of AdsClient connected to this Istiod.
@@ -577,13 +578,14 @@ func (s *DiscoveryServer) adsz(w http.ResponseWriter, req *http.Request) {
 	adsClients.Total = len(connections)
 	for _, c := range connections {
 		adsClient := AdsClient{
-			ConnectionID: c.conID,
-			ConnectedAt:  c.connectedAt,
-			PeerAddress:  c.peerAddr,
-			Labels:       c.proxy.Labels,
-			Metadata:     c.proxy.Metadata,
-			Locality:     c.proxy.Locality,
-			Watches:      map[string][]string{},
+			ConnectionID:     c.conID,
+			ConnectedAt:      c.connectedAt,
+			PeerAddress:      c.peerAddr,
+			Labels:           c.proxy.Labels,
+			Metadata:         c.proxy.Metadata,
+			Locality:         c.proxy.Locality,
+			Watches:          map[string][]string{},
+			ServiceInstances: c.proxy.ServiceInstances,
 		}
 		c.proxy.RLock()
 		for k, wr := range c.proxy.WatchedResources {
