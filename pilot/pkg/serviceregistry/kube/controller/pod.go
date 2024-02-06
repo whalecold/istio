@@ -48,6 +48,9 @@ type PodCache struct {
 	// but once workloadEntry is created, the corresponding pod will be READY.
 	// Just used for workloadEntry node metadata retrieving.
 	nodesByIP map[string]string
+	// ipByPodsForNode is a reverse map of nodesByIP. This exists to allow us to prune stale entries in the
+	// pod cache if a pod changes IP.
+	ipByPodsForNode map[string]string
 
 	// needResync is map of IP to endpoint namespace/name. This is used to requeue endpoint
 	// events when pod event comes. This typically happens when pod is not available
@@ -64,6 +67,7 @@ func newPodCache(c *Controller, informer informer.FilteredSharedIndexInformer, q
 		c:                  c,
 		podsByIP:           make(map[string]string),
 		nodesByIP:          make(map[string]string),
+		ipByPodsForNode:    make(map[string]string),
 		IPByPods:           make(map[string]string),
 		needResync:         make(map[string]sets.String),
 		queueEndpointEvent: queueEndpointEvent,
@@ -238,21 +242,25 @@ func (pc *PodCache) deleteIP(ip string, podKey string) bool {
 	return false
 }
 
-func (pc *PodCache) deleteNodeNameByIP(ip string) {
+func (pc *PodCache) deleteNodeNameByIP(ip, podName string) {
 	pc.Lock()
 	defer pc.Unlock()
-	delete(pc.nodesByIP, ip)
+	if pc.nodesByIP[ip] == podName {
+		delete(pc.nodesByIP, ip)
+		delete(pc.ipByPodsForNode, podName)
+	}
 }
 
 func (pc *PodCache) updateNodeNameByIP(podName, ip, nodeName string) {
 	pc.Lock()
 	defer pc.Unlock()
-	if ip, f := pc.IPByPods[podName]; f {
+	if ip, f := pc.ipByPodsForNode[podName]; f {
 		// The pod already exists, but with another IP Address. We need to clean up that
 		// https://github.com/kubernetes/kubernetes/issues/108281
 		delete(pc.nodesByIP, ip)
 	}
 	pc.nodesByIP[ip] = nodeName
+	pc.ipByPodsForNode[podName] = ip
 }
 
 func (pc *PodCache) getNodeNameByIP(ip string) string {

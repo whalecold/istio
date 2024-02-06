@@ -39,7 +39,8 @@ import (
 )
 
 const (
-	sidecarClusterID = "sidecar.mesh.io/cluster-id"
+	sidecarClusterID             = "sidecar.mesh.io/cluster-id"
+	sidecarEnableAutoGetLocality = "sidecar.istio.io/enable-auto-get-locality"
 )
 
 func convertPort(port *networking.Port) *model.Port {
@@ -308,7 +309,9 @@ func (s *Controller) getLocality(wle *networking.WorkloadEntry) string {
 	if wle == nil {
 		return ""
 	}
-	if wle.Locality != "" || !features.AutoGetLocalityForWorkloadEntry {
+
+	enableAutoGetLocality := wle.Labels[sidecarEnableAutoGetLocality] == "true"
+	if wle.Locality != "" || !enableAutoGetLocality {
 		return wle.Locality
 	}
 

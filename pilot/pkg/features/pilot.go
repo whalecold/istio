@@ -79,12 +79,6 @@ var (
 		"Limits the number of incoming XDS requests per second. On larger machines this can be increased to handle more proxies concurrently.",
 	).Get()
 
-	AutoGetLocalityForWorkloadEntry = env.Register(
-		"AUTO_GET_LOCALITY_FOR_WORKLOADENTRY",
-		true,
-		"Auto get locality info for workloadentry from multicluster kube controller.",
-	).Get()
-
 	// FilterGatewayClusterConfig controls if a subset of clusters(only those required) should be pushed to gateways
 	FilterGatewayClusterConfig = env.Register("PILOT_FILTER_GATEWAY_CLUSTER_CONFIG", false,
 		"If enabled, Pilot will send only clusters that referenced in gateway virtual services attached to gateway").Get()
