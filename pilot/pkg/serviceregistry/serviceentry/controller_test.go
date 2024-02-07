@@ -1872,3 +1872,81 @@ func BenchmarkWorkloadEntryHandler(b *testing.B) {
 		sd.workloadEntryHandler(config.Config{}, *wle2, model.EventDelete)
 	}
 }
+
+func TestPodTemplateHash(t *testing.T) {
+	testCases := []struct {
+		desc      string
+		node      *model.Proxy
+		instance  *model.ServiceInstance
+		wantEqual bool
+	}{
+		{
+			desc: "hash equal",
+			node: &model.Proxy{
+				Metadata: &model.NodeMetadata{
+					Labels: map[string]string{
+						podTemplateHash: "123",
+					},
+				},
+			},
+			instance: &model.ServiceInstance{
+				Endpoint: &model.IstioEndpoint{
+					Labels: map[string]string{
+						podTemplateHash: "123",
+					},
+				},
+			},
+			wantEqual: true,
+		},
+		{
+			desc: "empty equal",
+			node: &model.Proxy{
+				Metadata: &model.NodeMetadata{},
+			},
+			instance: &model.ServiceInstance{
+				Endpoint: &model.IstioEndpoint{},
+			},
+			wantEqual: true,
+		},
+		{
+			desc: "empty not equal",
+			node: &model.Proxy{
+				Metadata: &model.NodeMetadata{
+					Labels: map[string]string{
+						podTemplateHash: "123",
+					},
+				},
+			},
+			instance: &model.ServiceInstance{
+				Endpoint: &model.IstioEndpoint{},
+			},
+			wantEqual: false,
+		},
+		{
+			desc: "empty not equal",
+			node: &model.Proxy{
+				Metadata: &model.NodeMetadata{
+					Labels: map[string]string{
+						podTemplateHash: "123",
+					},
+				},
+			},
+			instance: &model.ServiceInstance{
+				Endpoint: &model.IstioEndpoint{
+					Labels: map[string]string{
+						podTemplateHash: "1234",
+					},
+				},
+			},
+			wantEqual: false,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			got := matchedProxyAndEndpoint(tc.node, tc.instance)
+			if got != tc.wantEqual {
+				t.Errorf("got %v want %v", got, tc.wantEqual)
+			}
+		})
+	}
+}

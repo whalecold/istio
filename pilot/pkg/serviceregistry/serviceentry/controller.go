@@ -852,10 +852,9 @@ func (s *Controller) GetProxyServiceInstances(node *model.Proxy) []*model.Servic
 			// possibility of other namespaces inserting service instances into namespaces they do not
 			// control.
 			if node.Metadata.Namespace == "" || i.Service.Attributes.Namespace == node.Metadata.Namespace {
-				if getProxyPodTemplateHash(node) != getEndpontPodTemplateHash(i) {
-					continue
+				if matchedProxyAndEndpoint(node, i) {
+					out = append(out, i)
 				}
-				out = append(out, i)
 			}
 		}
 	}
@@ -866,15 +865,19 @@ const (
 	podTemplateHash = "pod-template-hash"
 )
 
+func matchedProxyAndEndpoint(node *model.Proxy, instance *model.ServiceInstance) bool {
+	return getProxyPodTemplateHash(node) == getEndpontPodTemplateHash(instance)
+}
+
 func getProxyPodTemplateHash(node *model.Proxy) string {
-	if node == nil || node.Metadata == nil || node.Metadata.Labels == nil {
+	if node == nil || node.Metadata == nil {
 		return ""
 	}
 	return node.Metadata.Labels[podTemplateHash]
 }
 
 func getEndpontPodTemplateHash(instance *model.ServiceInstance) string {
-	if instance == nil || instance.Endpoint == nil || instance.Endpoint.Labels == nil {
+	if instance == nil || instance.Endpoint == nil {
 		return ""
 	}
 	return instance.Endpoint.Labels[podTemplateHash]
