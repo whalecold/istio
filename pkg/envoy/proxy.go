@@ -18,7 +18,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -30,7 +32,11 @@ import (
 
 type envoy struct {
 	ProxyConfig
-	extraArgs []string
+	extraArgs    []string
+	watcher      Watcher
+	restartEpoch int
+	lock         sync.Mutex
+	cmds         map[int]*exec.Cmd
 }
 
 // Envoy binary flags
@@ -44,6 +50,9 @@ type ProxyConfig struct {
 	OutlierLogPath string
 
 	BinaryPath             string
+	BinaryVersion          string
+	HotRestartBinaryPath   string
+	HotRestartFile         string
 	ConfigPath             string
 	ConfigCleanup          bool
 	AdminPort              int32
@@ -57,7 +66,7 @@ type ProxyConfig struct {
 }
 
 // NewProxy creates an instance of the proxy control commands
-func NewProxy(cfg ProxyConfig) Proxy {
+func NewProxy(cfg ProxyConfig) (Proxy, error) {
 	// inject tracing flag for higher levels
 	var args []string
 	logLevel, componentLogs := splitComponentLog(cfg.LogLevel)
@@ -71,10 +80,16 @@ func NewProxy(cfg ProxyConfig) Proxy {
 		args = append(args, "--component-log-level", cfg.ComponentLogLevel)
 	}
 
+	w, err := NewAggregateWatcher(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	return &envoy{
 		ProxyConfig: cfg,
 		extraArgs:   args,
-	}
+		watcher:     w,
+	}, nil
 }
 
 // splitComponentLog breaks down an argument string into a log level (ie "info") and component log levels (ie "misc:error").
@@ -129,7 +144,7 @@ func (e *envoy) args(fname string, bootstrapConfig string) []string {
 		// At high QPS (>250 QPS) we will log the same amount as we will log due to exceeding buffer size, rather
 		// than the flush interval.
 		"--file-flush-interval-msec", "1000",
-		"--disable-hot-restart", // We don't use it, so disable it to simplify Envoy's logic
+		//"--disable-hot-restart", // We don't use it, so disable it to simplify Envoy's logic
 	}
 	if e.ProxyConfig.LogAsJSON {
 		startupArgs = append(startupArgs,
@@ -143,6 +158,10 @@ func (e *envoy) args(fname string, bootstrapConfig string) []string {
 	}
 
 	startupArgs = append(startupArgs, e.extraArgs...)
+
+	if e.restartEpoch > 0 {
+		startupArgs = append(startupArgs, "--restart-epoch", strconv.Itoa(e.restartEpoch))
+	}
 
 	if bootstrapConfig != "" {
 		bytes, err := os.ReadFile(bootstrapConfig)
@@ -162,12 +181,10 @@ func (e *envoy) args(fname string, bootstrapConfig string) []string {
 
 var istioBootstrapOverrideVar = env.Register("ISTIO_BOOTSTRAP_OVERRIDE", "", "")
 
-func (e *envoy) Run(abort <-chan error) error {
+func (e *envoy) exec(done chan error) error {
 	// spin up a new Envoy process
 	args := e.args(e.ConfigPath, istioBootstrapOverrideVar.Get())
 	log.Infof("Envoy command: %v", args)
-
-	/* #nosec */
 	cmd := exec.Command(e.BinaryPath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -179,23 +196,65 @@ func (e *envoy) Run(abort <-chan error) error {
 		}
 	}
 
+	restartEpoch := e.restartEpoch
 	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("envoy restartEpoch %d start failed %v", restartEpoch, err)
+	}
+
+	log.Infof("Envoy pid %d restartEpoch %d start running", cmd.Process.Pid, restartEpoch)
+
+	e.lock.Lock()
+	e.cmds[restartEpoch] = cmd
+	e.lock.Unlock()
+	e.restartEpoch += 1
+	go func() {
+		err := cmd.Wait()
+		if err != nil {
+			log.Warnf("Envoy pid %d restartEpoch %d exited with error: %v ", cmd.Process.Pid, restartEpoch, err)
+		}
+		e.lock.Lock()
+		delete(e.cmds, restartEpoch)
+		if len(e.cmds) == 0 {
+			done <- err
+		}
+		e.lock.Unlock()
+	}()
+	return nil
+}
+
+func (e *envoy) Run(abort <-chan error) error {
+	err := e.watcher.Run()
+	if err != nil {
 		return err
 	}
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
+	defer e.watcher.Close()
 
-	select {
-	case err := <-abort:
-		log.Warnf("Aborting proxy")
-		if errKill := cmd.Process.Kill(); errKill != nil {
-			log.Warnf("killing proxy caused an error %v", errKill)
+	done := make(chan error, 1)
+	err = e.exec(done)
+	if err != nil {
+		return err
+	}
+
+	for {
+		select {
+		case <-e.watcher.Notify():
+			err = e.exec(done)
+			if err != nil {
+				return err
+			}
+		case err := <-abort:
+			log.Warnf("Aborting proxy")
+			e.lock.Lock()
+			for epoch, cmd := range e.cmds {
+				if errKill := cmd.Process.Kill(); errKill != nil {
+					log.Warnf("killing proxy restartEpoch %d caused an error %v", epoch, errKill)
+				}
+			}
+			e.lock.Unlock()
+			return err
+		case err := <-done:
+			return err
 		}
-		return err
-	case err := <-done:
-		return err
 	}
 }
 

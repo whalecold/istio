@@ -289,7 +289,10 @@ func (a *Agent) initializeEnvoyAgent(ctx context.Context) error {
 	// used.
 	a.envoyOpts.AgentIsRoot = os.Getuid() == 0 && strings.HasSuffix(a.cfg.DNSAddr, ":53")
 
-	envoyProxy := envoy.NewProxy(a.envoyOpts)
+	envoyProxy, err := envoy.NewProxy(a.envoyOpts)
+	if err != nil {
+		return err
+	}
 
 	drainDuration := a.proxyConfig.TerminationDrainDuration.AsDuration()
 	localHostAddr := localHostIPv4
