@@ -273,6 +273,9 @@ type Controller struct {
 	beginSync *atomic.Bool
 	// initialSync is set to true after performing an initial in-order processing of all objects.
 	initialSync *atomic.Bool
+
+	networksHandlerRegistration mesh.WatcherHandlerRegistration
+	meshHandlerRegistration     mesh.WatcherHandlerRegistration
 }
 
 // NewController creates a new Kubernetes controller
@@ -505,6 +508,17 @@ func (c *Controller) Cleanup() error {
 	if c.opts.XDSUpdater != nil {
 		c.opts.XDSUpdater.RemoveShard(model.ShardKeyFromRegistry(c))
 	}
+
+	// Unregister mesh handler
+	if c.meshHandlerRegistration != nil {
+		c.opts.MeshWatcher.DeleteMeshHandler(c.meshHandlerRegistration)
+	}
+
+	// Unregister networks handler
+	if c.networksHandlerRegistration != nil {
+		c.opts.NetworksWatcher.DeleteNetworksHandler(c.networksHandlerRegistration)
+	}
+
 	return nil
 }
 
@@ -857,7 +871,7 @@ func (c *Controller) Run(stop <-chan struct{}) {
 	}
 	st := time.Now()
 	if c.opts.NetworksWatcher != nil {
-		c.opts.NetworksWatcher.AddNetworksHandler(c.reloadNetworkLookup)
+		c.networksHandlerRegistration = c.opts.NetworksWatcher.AddNetworksHandler(c.reloadNetworkLookup)
 		c.reloadMeshNetworks()
 		c.reloadNetworkGateways()
 	}

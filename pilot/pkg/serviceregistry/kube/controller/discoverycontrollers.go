@@ -123,7 +123,7 @@ func (c *Controller) initMeshWatcherHandler(
 	meshWatcher mesh.Watcher,
 	discoveryNamespacesFilter filter.DiscoveryNamespacesFilter,
 ) {
-	meshWatcher.AddMeshHandler(func() {
+	c.meshHandlerRegistration = meshWatcher.AddMeshHandler(func() {
 		newSelectedNamespaces, deselectedNamespaces := discoveryNamespacesFilter.SelectorsChanged(meshWatcher.Mesh().GetDiscoverySelectors())
 
 		for _, nsName := range newSelectedNamespaces {

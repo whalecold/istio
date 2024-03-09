@@ -36,14 +36,16 @@ type NetworksHolder interface {
 type NetworksWatcher interface {
 	NetworksHolder
 
-	AddNetworksHandler(func())
+	AddNetworksHandler(func()) WatcherHandlerRegistration
+
+	DeleteNetworksHandler(WatcherHandlerRegistration)
 }
 
 var _ NetworksWatcher = &internalNetworkWatcher{}
 
 type internalNetworkWatcher struct {
 	mutex        sync.RWMutex
-	handlers     []func()
+	handlers     []*watchHandler
 	networks     *meshconfig.MeshNetworks
 	prevNetworks *meshconfig.MeshNetworks
 }
@@ -105,7 +107,7 @@ func (w *internalNetworkWatcher) PrevNetworks() *meshconfig.MeshNetworks {
 
 // SetNetworks will use the given value for mesh networks and notify all handlers of the change
 func (w *internalNetworkWatcher) SetNetworks(meshNetworks *meshconfig.MeshNetworks) {
-	var handlers []func()
+	var handlers []*watchHandler
 
 	w.mutex.Lock()
 	if !reflect.DeepEqual(meshNetworks, w.networks) {
@@ -115,21 +117,39 @@ func (w *internalNetworkWatcher) SetNetworks(meshNetworks *meshconfig.MeshNetwor
 		// Store the new config.
 		w.prevNetworks = w.networks
 		w.networks = meshNetworks
-		handlers = append([]func(){}, w.handlers...)
+		handlers = append([]*watchHandler{}, w.handlers...)
 	}
 	w.mutex.Unlock()
 
 	// Notify the handlers of the change.
 	for _, h := range handlers {
-		h()
+		h.handler()
 	}
 }
 
 // AddNetworksHandler registers a callback handler for changes to the mesh network config.
-func (w *internalNetworkWatcher) AddNetworksHandler(h func()) {
+func (w *internalNetworkWatcher) AddNetworksHandler(h func()) WatcherHandlerRegistration {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
+	handler := &watchHandler{
+		handler: h,
+	}
+
 	// hack: prepend handlers; the last to be added will be run first and block other handlers
-	w.handlers = append([]func(){h}, w.handlers...)
+	w.handlers = append([]*watchHandler{handler}, w.handlers...)
+	return handler
+}
+
+func (w *internalNetworkWatcher) DeleteNetworksHandler(registration WatcherHandlerRegistration) {
+	if registration == nil {
+		return
+	}
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	if len(w.handlers) == 0 {
+		return
+	}
+	w.handlers = filterHandlerInPlace(w.handlers, registration)
 }
