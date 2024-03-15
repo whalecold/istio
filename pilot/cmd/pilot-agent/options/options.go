@@ -39,6 +39,7 @@ var (
 
 	serviceAccountVar = env.Register("SERVICE_ACCOUNT", "", "Name of service account")
 	clusterIDVar      = env.Register("ISTIO_META_CLUSTER_ID", "", "")
+	authClusterIDVar  = env.Register("ISTIO_AUTH_CLUSTER_ID", "", "")
 	// Provider for XDS auth, e.g., gcp. By default, it is empty, meaning no auth provider.
 	xdsAuthProvider = env.Register("XDS_AUTH_PROVIDER", "", "Provider for XDS auth")
 

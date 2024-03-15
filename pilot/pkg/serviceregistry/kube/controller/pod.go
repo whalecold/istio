@@ -41,7 +41,6 @@ type PodCache struct {
 	// pod cache if a pod changes IP.
 	IPByPods map[string]string
 
-	nodeLock sync.RWMutex
 	// nodesByIP maintains stable pod IP to node name key mapping
 	// this allows us to retrieve the latest node name by pod IP.
 	// This contains RUNNING UNREADY pods with an allocated IP.
@@ -49,6 +48,9 @@ type PodCache struct {
 	// but once workloadEntry is created, the corresponding pod will be READY.
 	// Just used for workloadEntry node metadata retrieving.
 	nodesByIP map[string]string
+	// ipByPodsForNode is a reverse map of nodesByIP. This exists to allow us to prune stale entries in the
+	// pod cache if a pod changes IP.
+	ipByPodsForNode map[string]string
 
 	// needResync is map of IP to endpoint namespace/name. This is used to requeue endpoint
 	// events when pod event comes. This typically happens when pod is not available
@@ -65,6 +67,7 @@ func newPodCache(c *Controller, informer informer.FilteredSharedIndexInformer, q
 		c:                  c,
 		podsByIP:           make(map[string]string),
 		nodesByIP:          make(map[string]string),
+		ipByPodsForNode:    make(map[string]string),
 		IPByPods:           make(map[string]string),
 		needResync:         make(map[string]sets.String),
 		queueEndpointEvent: queueEndpointEvent,
@@ -161,7 +164,7 @@ func (pc *PodCache) onEvent(curr any, ev model.Event) error {
 	key := kube.KeyFunc(pod.Name, pod.Namespace)
 	switch ev {
 	case model.EventAdd:
-		pc.updateNodeNameByIP(ip, nodeName)
+		pc.updateNodeNameByIP(pod.Name, ip, nodeName)
 		// can happen when istiod just starts
 		if pod.DeletionTimestamp != nil || !IsPodReady(pod) {
 			return nil
@@ -171,7 +174,7 @@ func (pc *PodCache) onEvent(curr any, ev model.Event) error {
 			return nil
 		}
 	case model.EventUpdate:
-		pc.updateNodeNameByIP(ip, nodeName)
+		pc.updateNodeNameByIP(pod.Name, ip, nodeName)
 		if pod.DeletionTimestamp != nil || !IsPodReady(pod) {
 			// delete only if this pod was in the cache
 			pc.deleteIP(ip, key)
@@ -182,7 +185,7 @@ func (pc *PodCache) onEvent(curr any, ev model.Event) error {
 			return nil
 		}
 	case model.EventDelete:
-		pc.deleteNodeNameByIP(ip)
+		pc.deleteNodeNameByIP(ip, pod.Name)
 		// delete only if this pod was in the cache,
 		// in most case it has already been deleted in `UPDATE` with `DeletionTimestamp` set.
 		if !pc.deleteIP(ip, key) {
@@ -239,21 +242,32 @@ func (pc *PodCache) deleteIP(ip string, podKey string) bool {
 	return false
 }
 
-func (pc *PodCache) deleteNodeNameByIP(ip string) {
-	pc.nodeLock.Lock()
-	defer pc.nodeLock.Unlock()
-	delete(pc.nodesByIP, ip)
+func (pc *PodCache) deleteNodeNameByIP(ip, podName string) {
+	pc.Lock()
+	defer pc.Unlock()
+	if pc.nodesByIP[ip] == podName {
+		delete(pc.nodesByIP, ip)
+		delete(pc.ipByPodsForNode, podName)
+	}
 }
 
-func (pc *PodCache) updateNodeNameByIP(ip, nodeName string) {
-	pc.nodeLock.Lock()
-	defer pc.nodeLock.Unlock()
+func (pc *PodCache) updateNodeNameByIP(podName, ip, nodeName string) {
+	pc.Lock()
+	defer pc.Unlock()
+	if ip, f := pc.ipByPodsForNode[podName]; f {
+		// The pod already exists, but with another IP Address. We need to clean up that
+		// https://github.com/kubernetes/kubernetes/issues/108281
+		delete(pc.nodesByIP, ip)
+	}
 	pc.nodesByIP[ip] = nodeName
+	pc.ipByPodsForNode[podName] = ip
 }
 
 func (pc *PodCache) getNodeNameByIP(ip string) string {
-	pc.nodeLock.RLock()
-	defer pc.nodeLock.RUnlock()
+	pc.RLock()
+	defer pc.RUnlock()
+	// Note: if the pod use host network, the node info may been deleted by
+	// other pod when they are scheduled in the same node.
 	return pc.nodesByIP[ip]
 }
 

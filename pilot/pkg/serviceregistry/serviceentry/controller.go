@@ -318,7 +318,7 @@ func (s *Controller) workloadEntryHandler(old, curr config.Config, event model.E
 			oldSes = currSes
 		} else {
 			// labels update should trigger proxy update
-			s.XdsUpdater.ProxyUpdate(s.Cluster(), wle.Address)
+			s.XdsUpdater.ProxyUpdate(s.ClusterForWorkloadEntry(wle), wle.Address)
 			oldSes = getWorkloadServiceEntries(getAppender.Configs(), oldWle)
 		}
 	}
@@ -373,7 +373,7 @@ func (s *Controller) workloadEntryHandler(old, curr config.Config, event model.E
 	if !fullPush {
 		// trigger full xds push to the related sidecar proxy
 		if event == model.EventAdd {
-			s.XdsUpdater.ProxyUpdate(s.Cluster(), wle.Address)
+			s.XdsUpdater.ProxyUpdate(s.ClusterForWorkloadEntry(wle), wle.Address)
 		}
 		s.edsUpdate(allInstances)
 		return
@@ -637,6 +637,13 @@ func (s *Controller) Provider() provider.ID {
 
 func (s *Controller) Cluster() cluster.ID {
 	return s.clusterID
+}
+
+func (s *Controller) ClusterForWorkloadEntry(wle *networking.WorkloadEntry) cluster.ID {
+	if clusterID, ok := wle.Labels[sidecarClusterID]; ok {
+		return cluster.ID(clusterID)
+	}
+	return s.Cluster()
 }
 
 // AppendServiceHandler adds service resource event handler. Service Entries does not use these handlers.

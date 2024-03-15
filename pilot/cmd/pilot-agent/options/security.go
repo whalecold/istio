@@ -39,6 +39,7 @@ func NewSecurityOptions(proxyConfig *meshconfig.ProxyConfig, stsPort int, tokenM
 		OutputKeyCertToDir:             outputKeyCertToDir,
 		ProvCert:                       provCert,
 		ClusterID:                      clusterIDVar.Get(),
+		AuthClusterID:                  authClusterIDVar.Get(),
 		FileMountedCerts:               fileMountedCertsEnv,
 		WorkloadNamespace:              PodNamespaceVar.Get(),
 		ServiceAccount:                 serviceAccountVar.Get(),

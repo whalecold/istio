@@ -751,7 +751,7 @@ func tryGetLatestObject(informer informer.FilteredSharedIndexInformer, obj any) 
 // That includes pending and deleting pod info.
 func (c *Controller) GetLocalityByAddr(addr string) (string, error) {
 	if !c.HasSynced() {
-		return "", fmt.Errorf("cluster %s has not synced when getLocalityLabel for addr %s", c.opts.ClusterID, addr)
+		return "", fmt.Errorf("cluster %s has not synced when GetLocalityByAddr for addr %s", c.opts.ClusterID, addr)
 	}
 	nodeName := c.pods.getNodeNameByIP(addr)
 	if nodeName == "" {

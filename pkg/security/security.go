@@ -175,10 +175,17 @@ type Options struct {
 
 	// ClusterID is the cluster where the agent resides.
 	// Normally initialized from ISTIO_META_CLUSTER_ID - after a tortuous journey it
+	// Deprecated for Citadel
 	// makes its way into the ClusterID metadata of Citadel gRPC request to create the cert.
 	// Didn't find much doc - but I suspect used for 'central cluster' use cases - so should
 	// match the cluster name set in the MC setup.
 	ClusterID string
+	// AuthClusterID is the cluster where the service account resides.
+	// Normally initialized from ISTIO_META_AUTH_CLUSTER_ID - after a tortuous journey it
+	// makes its way into the ClusterID metadata of Citadel gRPC request to create the cert.
+	// Didn't find much doc - but I suspect used for 'central cluster' use cases - so should
+	// match the cluster name set in the MC setup.
+	AuthClusterID string
 
 	// The type of Elliptical Signature algorithm to use
 	// when generating private keys. Currently only ECDSA is supported.
