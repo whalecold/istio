@@ -1257,7 +1257,8 @@ func TestGetLocality(t *testing.T) {
 				Address:  "1.1.1.1",
 				Locality: "test",
 				Labels: map[string]string{
-					sidecarClusterID: "c1",
+					sidecarClusterID:             "c1",
+					sidecarEnableAutoGetLocality: "true",
 				},
 			},
 			expected: "test",
@@ -1266,7 +1267,8 @@ func TestGetLocality(t *testing.T) {
 			name: "empty addr",
 			wle: &networking.WorkloadEntry{
 				Labels: map[string]string{
-					sidecarClusterID: "c1",
+					sidecarClusterID:             "c1",
+					sidecarEnableAutoGetLocality: "true",
 				},
 			},
 			expected: "",
@@ -1283,7 +1285,8 @@ func TestGetLocality(t *testing.T) {
 			wle: &networking.WorkloadEntry{
 				Address: "1.1.1.xx",
 				Labels: map[string]string{
-					sidecarClusterID: "c1",
+					sidecarClusterID:             "c1",
+					sidecarEnableAutoGetLocality: "true",
 				},
 			},
 			expected: "",
@@ -1293,7 +1296,8 @@ func TestGetLocality(t *testing.T) {
 			wle: &networking.WorkloadEntry{
 				Address: "1.1.1.1",
 				Labels: map[string]string{
-					sidecarClusterID: "c1",
+					sidecarClusterID:             "c1",
+					sidecarEnableAutoGetLocality: "true",
 				},
 			},
 			expected: "region1/zone1/subzone1",
@@ -1303,7 +1307,8 @@ func TestGetLocality(t *testing.T) {
 			wle: &networking.WorkloadEntry{
 				Address: "192.168.0.1",
 				Labels: map[string]string{
-					sidecarClusterID: "c55",
+					sidecarClusterID:             "c55",
+					sidecarEnableAutoGetLocality: "true",
 				},
 			},
 			expected: "second info",
@@ -1313,7 +1318,8 @@ func TestGetLocality(t *testing.T) {
 			wle: &networking.WorkloadEntry{
 				Address: "192.168.0.2",
 				Labels: map[string]string{
-					sidecarClusterID: "c55",
+					sidecarClusterID:             "c55",
+					sidecarEnableAutoGetLocality: "true",
 				},
 			},
 			expected: "",

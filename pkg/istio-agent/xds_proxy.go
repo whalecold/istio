@@ -86,6 +86,7 @@ type ResponseHandler func(resp *anypb.Any) error
 type XdsProxy struct {
 	stopChan             chan struct{}
 	clusterID            string
+	authClusterID        string
 	downstreamListener   net.Listener
 	downstreamGrpcServer *grpc.Server
 	istiodAddress        string
@@ -150,6 +151,7 @@ func initXdsProxy(ia *Agent) (*XdsProxy, error) {
 		istiodAddress:         ia.proxyConfig.DiscoveryAddress,
 		istiodSAN:             ia.cfg.IstiodSAN,
 		clusterID:             ia.secOpts.ClusterID,
+		authClusterID:         ia.secOpts.AuthClusterID,
 		handlers:              map[string]ResponseHandler{},
 		stopChan:              make(chan struct{}),
 		healthChecker:         health.NewWorkloadHealthChecker(ia.proxyConfig.ReadinessProbe, envoyProbe, ia.cfg.ProxyIPAddresses, ia.cfg.IsIPv6),
@@ -190,7 +192,7 @@ func initXdsProxy(ia *Agent) (*XdsProxy, error) {
 		}
 	}
 
-	proxyLog.Infof("Initializing with upstream address %q and cluster %q", proxy.istiodAddress, proxy.clusterID)
+	proxyLog.Infof("Initializing with upstream address %q and cluster %q", proxy.istiodAddress, proxy.authClusterID)
 
 	if err = proxy.initDownstreamServer(); err != nil {
 		return nil, err
@@ -352,7 +354,7 @@ func (p *XdsProxy) handleStream(downstream adsStream) error {
 	defer upstreamConn.Close()
 
 	xds := discovery.NewAggregatedDiscoveryServiceClient(upstreamConn)
-	ctx = metadata.AppendToOutgoingContext(context.Background(), "ClusterID", p.clusterID)
+	ctx = metadata.AppendToOutgoingContext(context.Background(), "ClusterID", p.authClusterID)
 	for k, v := range p.xdsHeaders {
 		ctx = metadata.AppendToOutgoingContext(ctx, k, v)
 	}

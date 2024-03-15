@@ -39,7 +39,8 @@ import (
 )
 
 const (
-	sidecarClusterID = "sidecar.mesh.io/cluster-id"
+	sidecarClusterID             = "sidecar.mesh.io/cluster-id"
+	sidecarEnableAutoGetLocality = "sidecar.mesh.io/enable-auto-get-locality"
 )
 
 func convertPort(port *networking.Port) *model.Port {
@@ -308,9 +309,12 @@ func (s *Controller) getLocality(wle *networking.WorkloadEntry) string {
 	if wle == nil {
 		return ""
 	}
-	if wle.Locality != "" {
+
+	enableAutoGetLocality := wle.Labels[sidecarEnableAutoGetLocality] == "true"
+	if wle.Locality != "" || !enableAutoGetLocality {
 		return wle.Locality
 	}
+
 	addr := wle.GetAddress()
 	if addr == "" {
 		return ""
@@ -338,7 +342,7 @@ func (s *Controller) getLocality(wle *networking.WorkloadEntry) string {
 	//    two pods in different clusters, use the clusterID attr to distinguish it.
 	// 2024.01.11 @zhenglisheng.zhengls
 	locality, err := getter.GetLocalityByAddr(cluster.ID(clusterID), addr)
-	if err != nil || locality == "" {
+	if err != nil {
 		log.Warnf("get locality from cluster %s for address %s failed: %v", clusterID, addr, err)
 	}
 	return locality

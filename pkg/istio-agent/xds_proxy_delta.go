@@ -114,7 +114,7 @@ func (p *XdsProxy) DeltaAggregatedResources(downstream xds.DeltaDiscoveryStream)
 	defer upstreamConn.Close()
 
 	xds := discovery.NewAggregatedDiscoveryServiceClient(upstreamConn)
-	ctx = metadata.AppendToOutgoingContext(context.Background(), "ClusterID", p.clusterID)
+	ctx = metadata.AppendToOutgoingContext(context.Background(), "ClusterID", p.authClusterID)
 	for k, v := range p.xdsHeaders {
 		ctx = metadata.AppendToOutgoingContext(ctx, k, v)
 	}
