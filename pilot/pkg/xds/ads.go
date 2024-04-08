@@ -823,32 +823,27 @@ func (s *DiscoveryServer) adsClientCount() int {
 }
 
 func (s *DiscoveryServer) ProxyUpdate(clusterID cluster.ID, ip string) {
-	var connection *Connection
+	var pushed bool
 
 	for _, v := range s.Clients() {
 		if v.proxy.Metadata.ClusterID == clusterID && v.proxy.IPAddresses[0] == ip {
-			connection = v
-			break
+			if !pushed {
+				if log.DebugEnabled() {
+					currentlyPending := s.pushQueue.Pending()
+					if currentlyPending != 0 {
+						log.Debugf("Starting new push while %v were still pending", currentlyPending)
+					}
+				}
+				pushed = true
+			}
+			s.pushQueue.Enqueue(v, &model.PushRequest{
+				Full:   true,
+				Push:   s.globalPushContext(),
+				Start:  time.Now(),
+				Reason: []model.TriggerReason{model.ProxyUpdate},
+			})
 		}
 	}
-
-	// It is possible that the envoy has not connected to this pilot, maybe connected to another pilot
-	if connection == nil {
-		return
-	}
-	if log.DebugEnabled() {
-		currentlyPending := s.pushQueue.Pending()
-		if currentlyPending != 0 {
-			log.Debugf("Starting new push while %v were still pending", currentlyPending)
-		}
-	}
-
-	s.pushQueue.Enqueue(connection, &model.PushRequest{
-		Full:   true,
-		Push:   s.globalPushContext(),
-		Start:  time.Now(),
-		Reason: []model.TriggerReason{model.ProxyUpdate},
-	})
 }
 
 // AdsPushAll will send updates to all nodes, with a full push.

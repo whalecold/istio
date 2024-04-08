@@ -888,18 +888,36 @@ func (node *Proxy) SetWorkloadLabels(env *Environment) {
 		node.Labels = node.Metadata.Labels
 		return
 	}
+	mergeLabel := func(l1, l2 map[string]string) map[string]string {
+		out := make(map[string]string, len(l1)+len(l2))
+		for k, v := range l1 {
+			out[k] = v
+		}
+		for k, v := range l2 {
+			out[k] = v
+		}
+		return out
+	}
+	// For mse of volc-engine with nacos registry enabled, the workload where the proxy resides is one of the
+	// running pods of the k8s cluster that is managed by the istio control plane, however, the actual service
+	// and service instances are defined by ServiceEntry and WorkloadEntry that are handled by
+	// ServiceEntryController. Since we inject a handful of labels into the WorkloadEntry to facilitate some
+	// function of mse, we prefer the labels of ServiceInstance which are converted from the WorkloadEntry
+	// rather than the labels from the actual running pods and the pod may reside in the different namespace of
+	// the proxy in the case of MSE.
+	// This logic won't conflict with the native behavior of istio for which the ServiceInstance is defined
+	// by the k8s service and the labels of it are converted from the labels of the running pod that backend
+	// the service which is the same as GetProxyWorkloadLabels.
+	if len(node.ServiceInstances) != 0 && node.ServiceInstances[0].Endpoint != nil {
+		node.Labels = mergeLabel(node.ServiceInstances[0].Endpoint.Labels, node.Metadata.StaticLabels)
+		return
+	}
 	labels := env.GetProxyWorkloadLabels(node)
 	if labels != nil {
-		node.Labels = make(map[string]string, len(labels)+len(node.Metadata.StaticLabels))
 		// we can't just equate proxy workload labels to node meta labels as it may be customized by user
 		// with `ISTIO_METAJSON_LABELS` env (pkg/bootstrap/config.go extractAttributesMetadata).
 		// so, we fill the `ISTIO_METAJSON_LABELS` as well.
-		for k, v := range node.Metadata.StaticLabels {
-			node.Labels[k] = v
-		}
-		for k, v := range labels {
-			node.Labels[k] = v
-		}
+		node.Labels = mergeLabel(labels, node.Metadata.StaticLabels)
 	} else {
 		// If could not find pod labels, fallback to use the node metadata labels.
 		node.Labels = node.Metadata.Labels
