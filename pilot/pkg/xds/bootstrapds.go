@@ -43,6 +43,11 @@ var _ model.XdsResourceGenerator = &BootstrapGenerator{}
 func (e *BootstrapGenerator) Generate(proxy *model.Proxy, w *model.WatchedResource, req *model.PushRequest) (model.Resources, model.XdsLogDetails, error) {
 	// The model.Proxy information is incomplete, re-parse the discovery request.
 	node := bootstrap.ConvertXDSNodeToNode(proxy.XdsNode)
+	// The locality info in the xdsNode may be empty if user doesn't set it in pod labels, server can recompute it from node if the node
+	// set it. Assign the empty node localtiy with the proxy one if it's not set.
+	if node.Locality == nil || (node.Locality.Region == "" && node.Locality.Zone == "" && node.Locality.SubZone == "") {
+		node.Locality = proxy.Locality
+	}
 
 	var buf bytes.Buffer
 	templateFile := bootstrap.GetEffectiveTemplatePath(node.Metadata.ProxyConfig)
