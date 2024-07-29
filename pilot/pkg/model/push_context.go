@@ -879,9 +879,6 @@ func (ps *PushContext) ServiceForHostname(proxy *Proxy, hostname host.Name) *Ser
 	if proxy != nil {
 		sidecarScope = proxy.SidecarScope
 		if proxy.OnDemandEnable {
-			if proxy.OnDemandSidecarScope == nil {
-				return nil
-			}
 			sidecarScope = proxy.OnDemandSidecarScope
 		}
 	}
@@ -890,6 +887,7 @@ func (ps *PushContext) ServiceForHostname(proxy *Proxy, hostname host.Name) *Ser
 		return sidecarScope.servicesByHostname[hostname]
 	}
 
+	log.Warnf("proxy[%s]get empty sidecarScope when ServiceForHostname, fallback to ServiceIndex", proxy.ID)
 	// SidecarScope shouldn't be null here. If it is, we can't disambiguate the hostname to use for a namespace,
 	// so the selection must be undefined.
 	for _, service := range ps.ServiceIndex.HostnameAndNamespace[hostname] {
