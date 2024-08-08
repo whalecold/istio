@@ -15,6 +15,7 @@
 package xds
 
 import (
+	"fmt"
 	"strings"
 
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
@@ -23,10 +24,12 @@ import (
 
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pilot/pkg/util/protoconv"
+	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/schema/gvk"
 	"istio.io/istio/pkg/config/schema/kind"
 	"istio.io/istio/pkg/jdsapi/istio.io/api/v3alpha1"
 	"istio.io/istio/pkg/util/sets"
+	"istio.io/pkg/log"
 )
 
 type JdsGenerator struct {
@@ -44,7 +47,8 @@ const (
 // ServiceList store service list
 // there may be more than one service in namespace
 // format: namespace -> name set
-func buildServiceList(resourceNames []string) map[string]sets.String {
+// format of resourceName is name.namespace
+func buildWatchedResources(resourceNames []string) map[string]sets.String {
 	if len(resourceNames) == 0 {
 		return nil
 	}
@@ -65,23 +69,27 @@ func buildServiceList(resourceNames []string) map[string]sets.String {
 	return res
 }
 
-func isQueryResource(svcList map[string]sets.String, namespace, name string) bool {
+func isWatchedResource(watches map[string]sets.String, namespace, name string) bool {
 	// user does not specify resourceNames, return all
-	if len(svcList) == 0 {
+	if len(watches) == 0 {
 		return true
 	}
-	nameMap, ok := svcList[namespace]
+	names, ok := watches[namespace]
 	if !ok {
 		return false
 	}
 
-	_, ok = nameMap[name]
+	_, ok = names[name]
 	return ok
 }
 
 const (
 	// MseConfigurationKey ...
-	MseConfigurationKey = "MseConfiguration"
+	MseConfigurationKey      = "MseConfiguration"
+	mseGlobalConfigName      = "global-jds-configuration"
+	mseGlobalConfigNamespace = "kube-system"
+	mseGlobaleLatestKey      = "mse-global-latest-configuration"
+	mseGlobaleLastKey        = "mse-global-last-configuration"
 )
 
 func (j *JdsGenerator) needPush(updates model.XdsUpdates) bool {
@@ -98,6 +106,21 @@ func (j *JdsGenerator) needPush(updates model.XdsUpdates) bool {
 	return false
 }
 
+func getGlobalConfiguration(global *config.Config) (*v3alpha1.GlobalConfiguration, bool, error) {
+	data, ok := global.Spec.(map[string]string)
+	if !ok {
+		return nil, false, fmt.Errorf("error type for jds globale configuration")
+	}
+	latestConfig := data[mseGlobaleLatestKey]
+	changed := latestConfig != data[mseGlobaleLastKey]
+	c := &v3alpha1.GlobalConfiguration{}
+	err := jsonpb.UnmarshalString(latestConfig, c)
+	if err != nil {
+		return c, false, fmt.Errorf("unmarshal jds global configuration error:%v", err)
+	}
+	return c, changed, nil
+}
+
 func (j *JdsGenerator) Generate(_ *model.Proxy, w *model.WatchedResource, req *model.PushRequest) (model.Resources, model.XdsLogDetails, error) {
 	if !j.needPush(req.ConfigsUpdated) {
 		return nil, model.DefaultXdsLogDetails, nil
@@ -105,15 +128,21 @@ func (j *JdsGenerator) Generate(_ *model.Proxy, w *model.WatchedResource, req *m
 
 	resources := make([]*discovery.Resource, 0)
 	// get java configuration configmap, if user not set ResourceNames, return all
-	serviceList := buildServiceList(w.ResourceNames)
+	watches := buildWatchedResources(w.ResourceNames)
 
 	cmList, err := j.Server.Env.ConfigStore.List(gvk.MseConfiguration, metav1.NamespaceAll)
 	if err != nil {
 		return nil, model.DefaultXdsLogDetails, err
 	}
 
+	globalConfigmap := j.Server.Env.ConfigStore.Get(gvk.MseConfiguration, mseGlobalConfigName, mseGlobalConfigNamespace)
+	gc, changed, err := getGlobalConfiguration(globalConfigmap)
+	if err != nil {
+		log.Warnf("parse global mse configuration error: %v", err)
+	}
+
 	for _, cm := range cmList {
-		if !isQueryResource(serviceList, cm.Namespace, cm.Name) {
+		if !isWatchedResource(watches, cm.Namespace, cm.Name) && !changed {
 			continue
 		}
 
@@ -130,8 +159,8 @@ func (j *JdsGenerator) Generate(_ *model.Proxy, w *model.WatchedResource, req *m
 		if err = jsonpb.UnmarshalString(val, c); err != nil {
 			return nil, model.DefaultXdsLogDetails, err
 		}
-
 		c.Name = cm.Name + "." + cm.Namespace
+		c.Global = gc
 		resources = append(resources, &discovery.Resource{
 			Resource: protoconv.MessageToAny(c),
 		})

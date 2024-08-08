@@ -47,7 +47,7 @@ func Test_buildServiceList(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := buildServiceList(tt.args.resourceNames); !reflect.DeepEqual(got, tt.want) {
+			if got := buildWatchedResources(tt.args.resourceNames); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("buildServiceList() = %v, want %v", got, tt.want)
 			}
 		})
