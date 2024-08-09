@@ -87,7 +87,7 @@ const (
 	// MseConfigurationKey ...
 	MseConfigurationKey      = "MseConfiguration"
 	mseGlobalConfigName      = "global-jds-configuration"
-	mseGlobalConfigNamespace = "kube-system"
+	mseGlobalConfigNamespace = "istio-system"
 	mseGlobaleLatestKey      = "mse-global-latest-configuration"
 	mseGlobaleLastKey        = "mse-global-last-configuration"
 )
@@ -107,6 +107,9 @@ func (j *JdsGenerator) needPush(updates model.XdsUpdates) bool {
 }
 
 func getGlobalConfiguration(global *config.Config) (*v3alpha1.GlobalConfiguration, bool, error) {
+	if global == nil {
+		return nil, false, nil
+	}
 	data, ok := global.Spec.(map[string]string)
 	if !ok {
 		return nil, false, fmt.Errorf("error type for jds globale configuration")
