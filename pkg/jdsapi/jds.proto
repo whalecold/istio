@@ -41,15 +41,9 @@ message MseLane {
   Dyeing dyeing = 2;
 }
 
-enum LaneMode {
-  PERMISSIVE = 0;
-  STRICT = 1;
-}
-
 message MseLaneService {
   string name = 1;
-  LaneMode mode = 2;
-  repeated Service services = 3;
+  repeated Service services = 10;
 }
 
 message Service {
