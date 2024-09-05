@@ -43,7 +43,7 @@ message MseLane {
 
 message MseLaneService {
   string name = 1;
-  repeated Service services = 10;
+  repeated Service services = 2;
 }
 
 message Service {
