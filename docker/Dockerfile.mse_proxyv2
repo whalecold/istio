@@ -13,6 +13,12 @@ ADD https://mse.tos-cn-beijing.volces.com/envoy%2Fc37284e5%2Fenvoy-Linux-x86_64.
 RUN tar -xzf envoy.tar.gz
 
 FROM hub.byted.org/istio/proxyv2:1.16.3
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        libc6 curl \
+    ; \
+    rm -rf /var/lib/apt/lists/*;  # Remove apt cache
 COPY --from=builder /work/out/linux_amd64/pilot-agent  /usr/local/bin/pilot-agent
 COPY --from=builder /work/envoy  /usr/local/bin/envoy
 COPY docker/proxy/decode.sh /opt/istio-proxy/decode.sh

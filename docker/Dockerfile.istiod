@@ -8,4 +8,12 @@ ENV GIT_SSH_COMMAND $CODEBASE
 RUN make build-pilot
 
 FROM hub.byted.org/istio/pilot:1.16.3
+USER root
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        libc6 curl \
+    ; \
+    rm -rf /var/lib/apt/lists/*;  # Remove apt cache
+USER istio-proxy
 COPY --from=builder /work/out/linux_amd64/pilot-discovery /usr/local/bin/pilot-discovery
