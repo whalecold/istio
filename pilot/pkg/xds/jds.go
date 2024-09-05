@@ -29,7 +29,6 @@ import (
 	"istio.io/istio/pkg/config/schema/kind"
 	"istio.io/istio/pkg/jdsapi/istio.io/api/v3alpha1"
 	"istio.io/istio/pkg/util/sets"
-	"istio.io/pkg/log"
 )
 
 type JdsGenerator struct {
