@@ -56,6 +56,7 @@ import (
 	"istio.io/istio/pkg/security"
 	netutil "istio.io/istio/pkg/util/net"
 	"istio.io/istio/pkg/util/sets"
+	"istio.io/pkg/log"
 )
 
 // deltaConfigTypes are used to detect changes and trigger delta calculations. When config updates has ONLY entries
@@ -94,6 +95,9 @@ func (configgen *ConfigGeneratorImpl) BuildClusters(proxy *model.Proxy, req *mod
 		}
 		if sidecarScope != nil {
 			services = sidecarScope.Services()
+		} else {
+			log.Warnf("id: %v the sidecarScope is empty when build CDS, that may the first cds request, on demand setting: %v",
+				proxy.ID, proxy.OnDemandEnable)
 		}
 	}
 	return configgen.buildClusters(proxy, req, services)
@@ -119,12 +123,12 @@ func copyServiceWithPortFilter(svc *model.Service, ports map[int]bool) *model.Se
 	return out
 }
 
-func (configgen *ConfigGeneratorImpl) buildWatchedClusters(proxy *model.Proxy, updates *model.PushRequest,
-	watched *model.WatchedResource,
-) ([]*discovery.Resource, model.XdsLogDetails) {
+func (configgen *ConfigGeneratorImpl) buildSubscribedClusters(proxy *model.Proxy, updates *model.PushRequest) (
+	[]string, []*discovery.Resource, model.XdsLogDetails,
+) {
 	var services []*model.Service
 	serviceHosts := make(map[host.Name]map[int]bool)
-	for _, cluster := range watched.ResourceNames {
+	for cluster := range updates.Delta.Subscribed {
 		// WatchedResources.ResourceNames will contain the names of the clusters it is subscribed to. We can
 		// check with the name of our service (cluster names are in the format outbound|<port>||<hostname>).
 		_, _, svcHost, port := model.ParseSubsetKey(cluster)
@@ -145,7 +149,23 @@ func (configgen *ConfigGeneratorImpl) buildWatchedClusters(proxy *model.Proxy, u
 			services = append(services, service)
 		}
 	}
-	return configgen.buildClusters(proxy, updates, services)
+	clusters, details := configgen.buildClusters(proxy, updates, services)
+	return calcRemovedClusters(updates.Delta, clusters), clusters, details
+}
+
+func calcRemovedClusters(delta model.ResourceDelta, clusters []*discovery.Resource) []string {
+	exists := map[string]bool{}
+	for _, cluster := range clusters {
+		exists[cluster.Name] = true
+	}
+
+	removedClusters := make([]string, 0, len(delta.Subscribed)+len(delta.Unsubscribed))
+	for cluster := range delta.Subscribed {
+		if !exists[cluster] {
+			removedClusters = append(removedClusters, cluster)
+		}
+	}
+	return append(removedClusters, sets.SortedList(delta.Unsubscribed)...)
 }
 
 // BuildDeltaClusters generates the deltas (add and delete) for a given proxy. Currently, only service changes are reflected with deltas.
@@ -155,11 +175,12 @@ func (configgen *ConfigGeneratorImpl) BuildDeltaClusters(proxy *model.Proxy, upd
 ) ([]*discovery.Resource, []string, model.XdsLogDetails, bool) {
 	// This method is triggered by a delta xDS request(checked through updates.Delta.IsEmpty())
 	// and we only need to build/generate the requested clusters
-	if !updates.Delta.IsEmpty() {
+	// Only used for on-demand cds.
+	if proxy.OnDemandEnable && !updates.Delta.IsEmpty() {
 		// TODO(wangjian.pg 2023.10.11) handle the wildcard subscription.
 		// TODO(wangjian.pg 2023.10.12)for ODCDS, do not need to rebuild inbound/blackhole/passthroughCluster everytime.
-		cl, lg := configgen.buildWatchedClusters(proxy, updates, watched)
-		return cl, nil, lg, true
+		removedClusters, cl, lg := configgen.buildSubscribedClusters(proxy, updates)
+		return cl, removedClusters, lg, true
 	}
 
 	// if we can't use delta, fall back to generate all

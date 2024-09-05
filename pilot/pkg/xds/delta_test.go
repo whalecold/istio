@@ -222,3 +222,146 @@ func TestDeltaReconnectRequests(t *testing.T) {
 		t.Fatalf("unexpected remove resources: %v", resn)
 	}
 }
+
+func TestOnDemandDeltaReconnectRequests(t *testing.T) {
+	s := xds.NewFakeDiscoveryServer(t, xds.FakeOptions{
+		Services: []*model.Service{
+			{
+				Hostname:       "adsondemand.example.com",
+				DefaultAddress: "10.11.0.0",
+				Ports: []*model.Port{
+					{
+						Name:     "http-main",
+						Port:     2080,
+						Protocol: protocol.HTTP,
+					},
+				},
+				Attributes: model.ServiceAttributes{
+					Name:      "adsondemand",
+					Namespace: "default",
+				},
+			},
+			{
+				Hostname:       "adsupdate.example.com",
+				DefaultAddress: "10.11.0.1",
+				Ports: []*model.Port{
+					{
+						Name:     "http-main",
+						Port:     2080,
+						Protocol: protocol.HTTP,
+					},
+				},
+				Attributes: model.ServiceAttributes{
+					Name:      "adsupdate",
+					Namespace: "default",
+				},
+			},
+			{
+				Hostname:       "adsstatic.example.com",
+				DefaultAddress: "10.11.0.2",
+				Ports: []*model.Port{
+					{
+						Name:     "http-main",
+						Port:     2080,
+						Protocol: protocol.HTTP,
+					},
+				},
+				Attributes: model.ServiceAttributes{
+					Name:      "adsstatic",
+					Namespace: "default",
+				},
+			},
+		},
+	})
+
+	const updateCluster = "outbound|2080||adsupdate.example.com"
+	const staticCluster = "outbound|2080||adsstatic.example.com"
+	const onDemandCluster = "outbound|2080||adsondemand.example.com"
+
+	//--------------------------------------------
+	ads := s.ConnectOnDemandDeltaADS()
+	// Send initial request
+	res := ads.RequestResponseAck(&discovery.DeltaDiscoveryRequest{
+		TypeUrl: v3.ClusterType,
+	})
+	// we must get the cluster back
+	// should return nil as it subscribes nothing
+	if resn := xdstest.ExtractResource(res.Resources); resn.Contains(updateCluster) || resn.Contains(staticCluster) {
+		t.Fatalf("unexpected resources: %v", resn)
+	}
+	if resn := sets.New(res.RemovedResources...); len(resn) != 0 {
+		t.Fatalf("unexpected resources: %v", resn)
+	}
+
+	// A push should get a response
+	s.Discovery.ConfigUpdate(&model.PushRequest{Full: true})
+	ads.ExpectResponse()
+
+	// Close the connection
+	ads.Cleanup()
+
+	//--------------------------------------------
+	// should return update and static resources
+	ads = s.ConnectOnDemandDeltaADS()
+	res = ads.RequestResponseAck(&discovery.DeltaDiscoveryRequest{
+		TypeUrl: v3.ClusterType,
+		InitialResourceVersions: map[string]string{
+			// This time we include the version map, since it is a reconnect
+			staticCluster: "",
+			updateCluster: "",
+		},
+	})
+	if resn := xdstest.ExtractResource(res.Resources); !resn.Contains(updateCluster) || !resn.Contains(staticCluster) {
+		t.Fatalf("unexpected resources: %v", resn)
+	}
+	if resn := sets.New(res.RemovedResources...); len(resn) != 0 {
+		t.Fatalf("unexpected resources: %v", resn)
+	}
+	// Close the connection
+	ads.Cleanup()
+
+	//--------------------------------------------
+	// Service is removed while connection is closed
+	s.MemRegistry.RemoveService("adsupdate.example.com")
+	s.Discovery.ConfigUpdate(&model.PushRequest{Full: true, ConfigsUpdated: map[model.ConfigKey]struct{}{{
+		Kind:      kind.ServiceEntry,
+		Name:      "adsupdate.example.com",
+		Namespace: "default",
+	}: {}}})
+	s.EnsureSynced(t)
+
+	ads = s.ConnectOnDemandDeltaADS()
+	// Send initial request
+	res = ads.RequestResponseAck(&discovery.DeltaDiscoveryRequest{
+		TypeUrl: v3.ClusterType,
+		InitialResourceVersions: map[string]string{
+			// This time we include the version map, since it is a reconnect
+			staticCluster: "",
+			updateCluster: "",
+		},
+	})
+	// we must NOT get the cluster back
+	if resn := xdstest.ExtractResource(res.Resources); resn.Contains(updateCluster) || !resn.Contains(staticCluster) {
+		t.Fatalf("unexpected resources: %v", resn)
+	}
+	// It should be removed
+	if resn := sets.New(res.RemovedResources...); !resn.Contains(updateCluster) {
+		t.Fatalf("unexpected remove resources: %v", resn)
+	}
+
+	res = ads.RequestResponseAck(&discovery.DeltaDiscoveryRequest{
+		TypeUrl:                v3.ClusterType,
+		ResourceNamesSubscribe: []string{onDemandCluster},
+	})
+	// we must NOT get the cluster back
+	if resn := xdstest.ExtractResource(res.Resources); !resn.Contains(onDemandCluster) {
+		t.Fatalf("unexpected resources: %v", resn)
+	}
+	// It should be removed
+	if resn := sets.New(res.RemovedResources...); len(resn) != 0 {
+		t.Fatalf("unexpected remove resources: %v", resn)
+	}
+	// Close the connection
+	ads.Cleanup()
+	//--------------------------------------------
+}
