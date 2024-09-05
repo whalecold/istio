@@ -357,10 +357,12 @@ func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery
 		} else {
 			deltaLog.Debugf("ADS:%s: INIT %s %s %v", stype, con.conID, request.ResponseNonce, request.ResourceNamesSubscribe)
 		}
+		var resourceNames sets.String
 		con.proxy.Lock()
+		resourceNames = watchedResourcesFromRequest(request)
 		con.proxy.WatchedResources[request.TypeUrl] = &model.WatchedResource{
 			TypeUrl:       request.TypeUrl,
-			ResourceNames: deltaWatchedResources(nil, request),
+			ResourceNames: sets.SortedList(resourceNames),
 		}
 		// For all EDS requests that we have already responded with in the same stream let us
 		// force the response. It is important to respond to those requests for Envoy to finish
@@ -379,8 +381,10 @@ func (s *DiscoveryServer) shouldRespondDelta(con *Connection, request *discovery
 		}
 		con.proxy.Unlock()
 		return true, model.ResourceDelta{
-			TypeUrl:      request.TypeUrl,
-			Subscribed:   sets.New(request.ResourceNamesSubscribe...),
+			TypeUrl: request.TypeUrl,
+			// should subscribe all the resource from request include the InitialResourceVersions
+			// https://bytedance.larkoffice.com/wiki/Yam2wPKEqiirXrkqaOlc6LGMnOf
+			Subscribed:   resourceNames,
 			Unsubscribed: sets.New(request.ResourceNamesUnsubscribe...),
 		}
 	}
@@ -591,6 +595,15 @@ func deltaWatchedResources(existing []string, request *discovery.DeltaDiscoveryR
 	}
 	res.DeleteAll(request.ResourceNamesUnsubscribe...)
 	return sets.SortedList(res)
+}
+
+func watchedResourcesFromRequest(req *discovery.DeltaDiscoveryRequest) sets.String {
+	res := sets.New(req.ResourceNamesSubscribe...)
+	// Set only on first request
+	for k := range req.InitialResourceVersions {
+		res.Insert(k)
+	}
+	return res
 }
 
 func extractNames(res []*discovery.Resource) []string {

@@ -390,6 +390,20 @@ func (f *FakeDiscoveryServer) ConnectDeltaADS() *DeltaAdsTest {
 	return NewDeltaAdsTest(f.t, conn)
 }
 
+// ConnectOnDemandDeltaADS starts a on-demand Delta ADS connection to the server. It will automatically be cleaned up when the test ends
+func (f *FakeDiscoveryServer) ConnectOnDemandDeltaADS() *DeltaAdsTest {
+	conn, err := grpc.Dial("buffcon",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return f.BufListener.Dial()
+		}))
+	if err != nil {
+		f.t.Fatalf("failed to connect: %v", err)
+	}
+	return NewOnDemandDeltaAdsTest(f.t, conn)
+}
+
 // Connect starts an ADS connection to the server using adsc. It will automatically be cleaned up when the test ends
 // watch can be configured to determine the resources to watch initially, and wait can be configured to determine what
 // resources we should initially wait for.

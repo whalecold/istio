@@ -38,6 +38,46 @@ func NewDeltaAdsTest(t test.Failer, conn *grpc.ClientConn) *DeltaAdsTest {
 	})
 }
 
+func NewOnDemandDeltaAdsTest(t test.Failer, conn *grpc.ClientConn) *DeltaAdsTest {
+	test.SetForTest(t, &features.DeltaXds, true)
+	test.SetForTest(t, &features.OnDemandXds, true)
+	return NewOnDemandDeltaXdsTest(t, conn, func(conn *grpc.ClientConn) (DeltaDiscoveryClient, error) {
+		xds := discovery.NewAggregatedDiscoveryServiceClient(conn)
+		return xds.DeltaAggregatedResources(context.Background())
+	})
+}
+
+func NewOnDemandDeltaXdsTest(t test.Failer, conn *grpc.ClientConn,
+	getClient func(conn *grpc.ClientConn) (DeltaDiscoveryClient, error),
+) *DeltaAdsTest {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	cl, err := getClient(conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := &DeltaAdsTest{
+		client:        cl,
+		conn:          conn,
+		context:       ctx,
+		cancelContext: cancel,
+		t:             t,
+		ID:            "sidecar~1.1.1.1~test.default~default.svc.cluster.local",
+		timeout:       time.Second,
+		metadata: model.NodeMetadata{
+			OnDemandXds: true,
+		},
+		Type:      v3.ClusterType,
+		responses: make(chan *discovery.DeltaDiscoveryResponse),
+		error:     make(chan error),
+	}
+	t.Cleanup(resp.Cleanup)
+
+	go resp.adsReceiveChannel()
+
+	return resp
+}
+
 func NewDeltaXdsTest(t test.Failer, conn *grpc.ClientConn,
 	getClient func(conn *grpc.ClientConn) (DeltaDiscoveryClient, error),
 ) *DeltaAdsTest {
