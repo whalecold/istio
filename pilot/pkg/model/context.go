@@ -877,7 +877,30 @@ func (node *Proxy) SetServiceInstances(serviceDiscovery ServiceDiscovery) {
 		}
 		return true
 	})
-	node.ServiceInstances = instances
+
+	if len(instances) <= 1 {
+		node.ServiceInstances = instances
+		return
+	}
+	// ref: pilot/pkg/serviceregistry/util/workloadinstances/util.go: 84
+	// If the number of instances is larger than one, filter the instances who reside in the namespace
+	// is not same with node.ConfigNamespace.
+	filteredInstances := make([]*ServiceInstance, 0, len(instances))
+	for _, instance := range instances {
+		// In the javaagent mode, the namespace of node may be different with the instances which is
+		// transferred from Pod/Service, should filter it.
+		if instance.Service != nil && instance.Service.Attributes.Namespace != node.ConfigNamespace {
+			continue
+		}
+		filteredInstances = append(filteredInstances, instance)
+	}
+	// fall back to choosing the old instances.
+	// NOTE: for the sake of backwards compatibility, we don't enforce
+	//       instance.Namespace == proxy.ConfigNamespace
+	if len(filteredInstances) == 0 {
+		filteredInstances = instances
+	}
+	node.ServiceInstances = filteredInstances
 }
 
 // SetWorkloadLabels will set the node.Labels.
