@@ -878,12 +878,8 @@ func (node *Proxy) SetServiceInstances(serviceDiscovery ServiceDiscovery) {
 		return true
 	})
 
-	if len(instances) <= 1 {
-		node.ServiceInstances = instances
-		return
-	}
 	// ref: pilot/pkg/serviceregistry/util/workloadinstances/util.go: 84
-	// If the number of instances is larger than one, filter the instances who reside in the namespace
+	// Filter the instances who reside in the namespace
 	// is not same with node.ConfigNamespace.
 	filteredInstances := make([]*ServiceInstance, 0, len(instances))
 	for _, instance := range instances {

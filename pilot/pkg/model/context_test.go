@@ -568,20 +568,38 @@ func TestSetServiceInstances(t *testing.T) {
 	instances := []*model.ServiceInstance{
 		{
 			Service: &model.Service{
+				Attributes: model.ServiceAttributes{
+					Namespace: "istio-system",
+				},
 				CreationTime: tnow.Add(1 * time.Second),
 				Hostname:     host.Name("test1.com"),
 			},
 		},
 		{
 			Service: &model.Service{
+				Attributes: model.ServiceAttributes{
+					Namespace: "istio-system",
+				},
 				CreationTime: tnow,
 				Hostname:     host.Name("test3.com"),
 			},
 		},
 		{
 			Service: &model.Service{
+				Attributes: model.ServiceAttributes{
+					Namespace: "default",
+				},
 				CreationTime: tnow,
 				Hostname:     host.Name("test2.com"),
+			},
+		},
+		{
+			Service: &model.Service{
+				Attributes: model.ServiceAttributes{
+					Namespace: "istio-system",
+				},
+				CreationTime: tnow,
+				Hostname:     host.Name("test4.com"),
 			},
 		},
 	}
@@ -593,13 +611,56 @@ func TestSetServiceInstances(t *testing.T) {
 		ServiceDiscovery: serviceDiscovery,
 	}
 
-	proxy := &model.Proxy{}
+	proxy := &model.Proxy{
+		ConfigNamespace: "istio-system",
+	}
 	proxy.SetServiceInstances(env)
 
 	assert.Equal(t, len(proxy.ServiceInstances), 3)
+	assert.Equal(t, proxy.ServiceInstances[0].Service.Hostname, host.Name("test3.com"))
+	assert.Equal(t, proxy.ServiceInstances[1].Service.Hostname, host.Name("test4.com"))
+	assert.Equal(t, proxy.ServiceInstances[2].Service.Hostname, host.Name("test1.com"))
+
+	serviceDiscovery.WantGetProxyServiceInstances = []*model.ServiceInstance{
+		{
+			Service: &model.Service{
+				Attributes: model.ServiceAttributes{
+					Namespace: "default",
+				},
+				CreationTime: tnow,
+				Hostname:     host.Name("test2.com"),
+			},
+		},
+	}
+	proxy.SetServiceInstances(env)
+	assert.Equal(t, len(proxy.ServiceInstances), 1)
+	assert.Equal(t, proxy.ServiceInstances[0].Service.Hostname, host.Name("test2.com"))
+
+	//-------------------
+	serviceDiscovery.WantGetProxyServiceInstances = []*model.ServiceInstance{
+		{
+			Service: &model.Service{
+				Attributes: model.ServiceAttributes{
+					Namespace: "default",
+				},
+				CreationTime: tnow,
+				Hostname:     host.Name("test3.com"),
+			},
+		},
+		{
+			Service: &model.Service{
+				Attributes: model.ServiceAttributes{
+					Namespace: "default",
+				},
+				CreationTime: tnow,
+				Hostname:     host.Name("test2.com"),
+			},
+		},
+	}
+	proxy.SetServiceInstances(env)
+	assert.Equal(t, len(proxy.ServiceInstances), 2)
 	assert.Equal(t, proxy.ServiceInstances[0].Service.Hostname, host.Name("test2.com"))
 	assert.Equal(t, proxy.ServiceInstances[1].Service.Hostname, host.Name("test3.com"))
-	assert.Equal(t, proxy.ServiceInstances[2].Service.Hostname, host.Name("test1.com"))
 }
 
 func TestGlobalUnicastIP(t *testing.T) {
